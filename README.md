@@ -1,9 +1,9 @@
-# **Golang enter code hereRAG/LLM framework with Memory and Transcriber - All-in-One Platform**
+# **Golang RAG/LLM framework with Memory and Transcriber - All-in-One Platform**
   
 
 This project is an easy to use **RAG (Retrieval-Augmented Generation)** system that combines an **LLM client with memory**, **text embedding**, and **document transcription** in a single easy-to-configure platform  framework over [LangChain Go](https://github.com/tmc/langchaingo).
 
-It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excellent choice for chatbot applications and AI-powered search solutions.
+It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excellent choice for chatbot applications.
 
   
 
@@ -47,7 +47,7 @@ It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excell
 
   
 
-## **Installation**
+## **Configuration**
 
   
 
@@ -75,7 +75,7 @@ TIKA_URL=http://localhost:9998/tika //not mandatory for text and html usage
 ## **Usage**
 
   
-Refer to the [examples](http://github.com/rezaArani/aillm/tree/main/examples) folder in the repository for more details. Below is a simple usage example:
+Refer to the [examples](https://github.com/RezaArani/aillm/tree/master/examples) folder in the repository for more details. Below is a simple usage example:
 
 
 
