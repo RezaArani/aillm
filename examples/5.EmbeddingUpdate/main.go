@@ -11,6 +11,7 @@ import (
 
 func main() {
 	log.Println("Start:")
+	
 
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
@@ -18,42 +19,43 @@ func main() {
 			AiModel: "llama3.1",
 		},
 	}
- 
+
 	// Create an LLM instance with OllamaClient
 	llm := aillm.LLMContainer{
-		Embedder:  llmclient,
-		LLMClient: llmclient,
+		Embedder:       llmclient,
+		LLMClient:      llmclient,
 		ScoreThreshold: 0.8,
-		DataRedis: aillm.RedisClient{
+		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
-	
+
 	llm.Init()
-	embeddingId := "MyId"
 	embeddingTitle := "rawText"
 	// let's embed some data
-	embedd(llm, embeddingId, embeddingTitle, StartData)
+	embedd(llm, embeddingTitle, StartData)
 	// Response to the next question June 2024
-	askKLLM(llm, embeddingId, "en", "User1", "SemMapas launch date?")
+	askKLLM(llm, "User1", "SemMapas launch date?")
 
 	// Updating same embedding data
-	embedd(llm, embeddingId, embeddingTitle, UpdatedData)
-	// April 2023, after updating previous data 
-	askKLLM(llm, embeddingId, "en", "User1", "SemMapas launch date?")
+	embedd(llm, embeddingTitle, UpdatedData)
+	// April 2023, after updating previous data
+	askKLLM(llm, "User1", "SemMapas launch date?")
 
 	// Cleanup
-	removeEmbedd(llm, embeddingId, embeddingTitle)
+	llm.RemoveEmbeddingDataFromRedis(embeddingTitle)
+
 	// No data after removing embedded data so : I couldn't find any specific information or details regarding the launch date of SemMapas.
-	askKLLM(llm, embeddingId, "en", "User1", "SemMapas launch date?")
+	askKLLM(llm, "User1", "SemMapas launch date?")
 
 }
 
-
-func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) {
+func askKLLM(llm aillm.LLMContainer, user, query string) {
 	log.Println("LLM Reply to " + query + " from " + user + ":")
-	response, resDocs, err := llm.AskLLM(EmbeddingId, Language, user, query, print)
-	if err!=nil{
+	queryResult, err := llm.AskLLM(query, llm.WithSessionID(user), llm.WithStreamingFunc(print))
+	response := queryResult.Response
+	resDocs := queryResult.RagDocs
+	if err != nil {
 		panic(err)
 	}
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
@@ -65,18 +67,16 @@ func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) 
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}
-	 
+
 }
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, title)
-}
-func embedd(llm aillm.LLMContainer, EmbeddingId, Title, content string) {
+
+func embedd(llm aillm.LLMContainer, Title, content string) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: content,
 	}
-	llm.EmbeddText(EmbeddingId, Title, contents)
+	llm.EmbeddText(Title, contents)
 
 }
 

@@ -32,35 +32,35 @@ func main() {
 	llm := aillm.LLMContainer{
 		Embedder:  embeddingllmclient,
 		LLMClient: llmclient,
-		DataRedis: aillm.RedisClient{
+		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
 	llm.Init()
-	embeddingId := "MyIdDifferentModels"
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingId)
-	// Rag powered query 
-	askKLLM(llm, embeddingId, "en", "User1", "What is SemMapas?")
+	embedd(llm)
+	// Rag powered query
+	askKLLM(llm, "What is SemMapas?")
 	// Now let's remove the embedding and the result should be something like I couldn't find any relevant information or a clear answer regarding your question about SemMapas.
 	log.Println("Removing Embedding:")
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, "SemMapas")
-	askKLLM(llm, embeddingId, "en", "User2", "What is SemMapas?")
+	llm.RemoveEmbeddingDataFromRedis("SemMapas")
+	askKLLM(llm, "What is SemMapas?")
 	// Now let's rely on model data and hallucination and the result should be something like "SemMapas is a Brazilian navigation app that provides turn-by-turn directions and real-time traffic information." which is not correct.
 	llm.AllowHallucinate = true
-	askKLLM(llm, embeddingId, "en", "User3", "What is SemMapas?")
+	askKLLM(llm, "What is SemMapas?")
 
 	// Cleanup
-	removeEmbedd(llm, embeddingId, "SemMapas")
-	
+	llm.RemoveEmbeddingDataFromRedis("SemMapas")
 
 }
 
-func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) {
-	log.Println("LLM Reply to " + query + " from " + user + ":")
-	response, resDocs, err := llm.AskLLM(EmbeddingId, Language, user, query, print)
-	if err!=nil{
+func askKLLM(llm aillm.LLMContainer, query string) {
+	log.Println("LLM Reply to " + query + ":")
+	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
+	response := queryResult.Response
+	resDocs := queryResult.RagDocs
+	if err != nil {
 		panic(err)
 	}
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
@@ -72,19 +72,16 @@ func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) 
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}
-	 
+
 }
 
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, title)
-}
-func embedd(llm aillm.LLMContainer, EmbeddingId string) {
+func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
-	llm.EmbeddText(EmbeddingId, "SemMapas", contents)
+	llm.EmbeddText("SemMapas", contents)
 }
 
 func print(ctx context.Context, chunk []byte) error {

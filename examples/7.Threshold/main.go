@@ -32,18 +32,17 @@ func main() {
 	llm := aillm.LLMContainer{
 		Embedder:  embeddingllmclient,
 		LLMClient: llmclient,
-		DataRedis: aillm.RedisClient{
+		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
 	llm.Init()
-	embeddingId := "MyId"
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingId)
+	embedd(llm)
 	// Distance to the result. greater means more R data but not accurate
 	// llm.ScoreThreshold = 0.8
-	askKLLM(llm, embeddingId, "en", "User1", "SemMapas city?")
+	askKLLM(llm,  "SemMapas city?")
 
 	// A higher score results in the inclusion of more information, which increases the size of the RAG dataset and the number of tokens used. This can lead to several problems:
 	// 1. Inclusion of excessive and irrelevant information can slow down response times, increase processing overhead on the LLM, and dilute the relevance of the output.
@@ -52,15 +51,15 @@ func main() {
 	// It is essential to balance the score to optimize the trade-off between information richness and processing efficiency.
 
 	llm.ScoreThreshold = 0.9
-	askKLLM(llm, embeddingId, "en", "User2", "SemMapas city?")
+	askKLLM(llm,  "SemMapas city?")
 	// Now let's make it more accurate
 	llm.ScoreThreshold = 0.5
-	askKLLM(llm, embeddingId, "en", "User3", "SemMapas city?")
+	askKLLM(llm, "SemMapas city?")
 
 	// ask about another subject
 	llm.ScoreThreshold = 0.7
 
-	askKLLM(llm, embeddingId, "en", "User4", "tell me about historical paris and farm issues?")
+	askKLLM(llm, "tell me about historical paris and farm issues?")
 
 	// Tip for setting a good threshold for cosine similarity search:
 	// Choose a threshold that ensures relevance while minimizing noise. Start with a threshold around 0.7–0.8, as this typically captures meaningful matches without overloading the response with less relevant data. Adjust based on your specific use case and test the quality of the retrieved results. Lower thresholds may retrieve irrelevant results, while higher thresholds might omit useful information.
@@ -69,18 +68,21 @@ func main() {
 	// The quality of the embedding model used in cosine similarity search significantly impacts the results. Choosing a high-quality model that generates embeddings suited to your domain (e.g., general-purpose models like Sentence Transformers for diverse text or domain-specific embeddings for specialized tasks) can improve the accuracy of similarity matching. A good embedding model will better capture semantic meaning, allowing you to set more reliable thresholds and retrieve more relevant and concise results.
 
 	// Cleanup
-	removeEmbedd(llm, embeddingId, "SemMapas")
-	removeEmbedd(llm, embeddingId, "JohnDoe")
-	removeEmbedd(llm, embeddingId, "ParisHistory")
-	removeEmbedd(llm, embeddingId, "CropPestInfection")
+	llm.RemoveEmbeddingDataFromRedis( "SemMapas")
+
+	llm.RemoveEmbeddingDataFromRedis("JohnDoe")
+	llm.RemoveEmbeddingDataFromRedis("ParisHistory")
+	llm.RemoveEmbeddingDataFromRedis("CropPestInfection")
+ 
 
 }
 
-
-func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) {
-	log.Println("LLM Reply to " + query + " from " + user + ":")
-	response, resDocs, err := llm.AskLLM(EmbeddingId, Language, user, query, print)
-	if err!=nil{
+func askKLLM(llm aillm.LLMContainer, query string) {
+	log.Println("LLM Reply to " + ":")
+	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
+	response := queryResult.Response
+	resDocs := queryResult.RagDocs
+	if err != nil {
 		panic(err)
 	}
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
@@ -92,38 +94,35 @@ func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) 
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}
-	 
-}
 
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, title)
 }
-func embedd(llm aillm.LLMContainer, EmbeddingId string) {
+ 
+func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
 
-	llm.EmbeddText(EmbeddingId, "SemMapas", contents)
+	llm.EmbeddText( "SemMapas", contents)
 
 	contents = make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: JohnDoe,
 	}
-	llm.EmbeddText(EmbeddingId, "JohnDoe", contents)
+	llm.EmbeddText(  "JohnDoe", contents)
 
 	contents = make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: ParisHistory,
 	}
-	llm.EmbeddText(EmbeddingId, "ParisHistory", contents)
+	llm.EmbeddText("ParisHistory", contents)
 
 	contents = make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: CropPestInfection,
 	}
-	llm.EmbeddText(EmbeddingId, "CropPestInfection", contents)
+	llm.EmbeddText( "CropPestInfection", contents)
 
 }
 

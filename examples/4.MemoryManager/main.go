@@ -12,6 +12,8 @@ import (
 func main() {
 	log.Println("Start:")
 
+	
+
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
@@ -23,40 +25,42 @@ func main() {
 	llm := aillm.LLMContainer{
 		Embedder:  llmclient,
 		LLMClient: llmclient,
-		DataRedis: aillm.RedisClient{
+		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
+
 	llm.Init()
-	embeddingId := "MyId"
-	embeddingTitle := "rawText"
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingId)
+	embedd(llm)
 	// looks for the data in "en" language contents
-	askKLLM(llm, embeddingId, "en", "User1", "Tell me about SemMapas?")
+	askKLLM(llm, "User1", "Tell me about SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
-	askKLLM(llm, embeddingId, "en", "User2", "Tell me about JohnDoe?")
+	askKLLM(llm, "User2", "Tell me about JohnDoe?")
 
-	// Information about SemMapas for user 1 based on memory 
-	askKLLM(llm, embeddingId, "en", "User1", "Where and when?")
-	// Information about JohnDoe for user 1 based on memory
-	askKLLM(llm, embeddingId, "en", "User2", "Where and when?")
+	// Information about SemMapas for user 1 based on memory 2023 in Portugal
+	askKLLM(llm, "User1", "Where and when?")
+	// Information about JohnDoe for user 1 based on memory Berlin, Germany, 2018
+	askKLLM(llm, "User2", "Where and when?")
 
-	//Let's delete User1's memory and ask the same question again.
+	//Let's delete User1's memory and ask the same question again. result should be something like :I'm unable to provide a specific location or time frame as I couldn't find any relevant information regarding your query.
+
 	llm.MemoryManager.DeleteMemory("User1")
-	askKLLM(llm, embeddingId, "en", "User1", "Where and when?")
+	askKLLM(llm, "User1", "Where and when?")
 
 	// Cleanup
-	removeEmbedd(llm, embeddingId, embeddingTitle)
+	llm.RemoveEmbeddingDataFromRedis("SemMapas")
+	llm.RemoveEmbeddingDataFromRedis("JohnDoe")
 
 }
 
-
-func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) {
+func askKLLM(llm aillm.LLMContainer, user, query string) {
 	log.Println("LLM Reply to " + query + " from " + user + ":")
-	response, resDocs, err := llm.AskLLM(EmbeddingId, Language, user, query, print)
-	if err!=nil{
+	queryResult, err := llm.AskLLM(query, llm.WithSessionID(user), llm.WithStreamingFunc(print))
+	response := queryResult.Response
+	resDocs := queryResult.RagDocs
+	if err != nil {
 		panic(err)
 	}
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
@@ -68,25 +72,22 @@ func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) 
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}
-	 
+
 }
 
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, title)
-}
-func embedd(llm aillm.LLMContainer, EmbeddingId string) {
+func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
-	
-	llm.EmbeddText(EmbeddingId, "SemMapas", contents)
+
+	llm.EmbeddText("SemMapas", contents)
 	contents = make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: JohnDoe,
 	}
-	llm.EmbeddText(EmbeddingId, "JohnDoe", contents)
+	llm.EmbeddText("JohnDoe", contents)
 
 }
 
@@ -100,7 +101,6 @@ With SemMapas, you can effortlessly map out venues, highlight points of interest
 Our platform goes beyond traditional mapping services, offering a comprehensive suite of features tailored to meet the diverse needs of event organizers and businesses alike. From tourism guides to event navigation, SemMapas empowers you to create immersive experiences that captivate your audience and enhance their journey.
 Our project has been launched since 2023 in Portugal.
 `
-
 
 const JohnDoe = `Welcome to JohnDoe, your trusted partner in delivering cutting-edge solutions for sustainable urban development and smart city innovations. At JohnDoe, we specialize in creating intelligent systems that empower municipalities and businesses to thrive in a rapidly evolving world.
 

@@ -12,47 +12,49 @@ import (
 func main() {
 	log.Println("Start:")
 
+	
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
 			AiModel: "llama3.1",
 		},
 	}
- 
 
 	// Create an LLM instance with OllamaClient
 	llm := aillm.LLMContainer{
-		Embedder:  llmclient,
-		LLMClient: llmclient,
-		DataRedis: aillm.RedisClient{
+		Embedder:       llmclient,
+		LLMClient:      llmclient,
+		ScoreThreshold: 0.8,
+		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
+
 	llm.Init()
-	embeddingId := "MyId"
 	embeddingTitle := "rawText"
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingId, embeddingTitle)
+	embedd(llm, embeddingTitle)
 	// looks for the data in "en" language contents
-	askKLLM(llm, embeddingId, "en", "User1", "What is SemMapas?")
+	askKLLM(llm, "en", "What is SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
-	askKLLM(llm, embeddingId, "pt", "User1", "What is SemMapas?")
+	askKLLM(llm, "pt", "What is SemMapas?")
 	llm.LLMModelLanguageDetectionCapability = true
-	// looks for  for the data in "en" language contents but replies in Persian because prompt was in Persian language. 
+	// looks for  for the data in "en" language contents but replies in Persian because prompt was in Persian language.
 	// please remember this feature depends on model capabilites and is not usable on small models
-	askKLLM(llm, embeddingId, "en", "User1", "چیه؟ SemMapas?")
+	askKLLM(llm, "en", "چیه؟ SemMapas?")
 
 	// Cleanup
-	removeEmbedd(llm, embeddingId, embeddingTitle)
+	llm.RemoveEmbeddingDataFromRedis(embeddingTitle)
 
 }
 
-
-func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) {
-	log.Println("LLM Reply to " + query + " from " + user + ":")
-	response, resDocs, err := llm.AskLLM(EmbeddingId, Language, user, query, print)
-	if err!=nil{
+func askKLLM(llm aillm.LLMContainer, Language, query string) {
+	log.Println("LLM Reply to " + query + ":")
+	queryResult, err := llm.AskLLM(query, llm.WithLanguage(Language), llm.WithStreamingFunc(print))
+	response := queryResult.Response
+	resDocs := queryResult.RagDocs
+	if err != nil {
 		panic(err)
 	}
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
@@ -64,12 +66,10 @@ func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) 
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}
-	 
+
 }
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, title)
-}
-func embedd(llm aillm.LLMContainer, EmbeddingId, Title string) {
+
+func embedd(llm aillm.LLMContainer, Title string) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
@@ -78,7 +78,7 @@ func embedd(llm aillm.LLMContainer, EmbeddingId, Title string) {
 	contents["pt"] = aillm.LLMEmbeddingContent{
 		Text: ptRawText,
 	}
-	llm.EmbeddText(EmbeddingId, Title, contents)
+	llm.EmbeddText(Title, contents)
 
 }
 

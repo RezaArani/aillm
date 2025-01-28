@@ -13,11 +13,6 @@ import (
 func main() {
 	log.Println("Start:")
 
-	// This test utilizes different models and clients to demonstrate functionality:
-	// - For embeddings, we use the "all-MiniLM" model.
-	// - For the LLM component, we leverage OVHCloud AI endpoints via the OpenAI client.
-	// Additionally, the OLLAMA model is hosted locally for testing purposes, showcasing the integration of various systems.
-
 	embeddingllmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
@@ -45,17 +40,23 @@ func main() {
 	// let's embed some data
 	log.Println("Embedding:")
 	embedd(llm)
-	// Distance to the result. greater means more R data but not accurate
-	askKLLM(llm, "SemMapas city and clients?")
+	// First search will be in "Company category". Result should be something about SemMapas company.
+	askKLLM(llm, "Company", "SemMapas city?")
+	// Now let's search in Agriculture category and result should be something like I can't find ...
+	askKLLM(llm, "Agriculture", "SemMapas city?")
+
+	// Now let's search in Agriculture category about related subject.
+	askKLLM(llm, "Agriculture", "Tell me about crop infection.")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("SemMapas")
+	llm.RemoveEmbeddingDataFromRedis("CropPestInfection", llm.WithEmbeddingPrefix("Agriculture"))
+	llm.RemoveEmbeddingDataFromRedis("SemMapas", llm.WithEmbeddingPrefix("Company"))
 
 }
 
-func askKLLM(llm aillm.LLMContainer, query string) {
-	log.Println("LLM Reply to " + query + ":")
-	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
+func askKLLM(llm aillm.LLMContainer, category, query string) {
+	log.Println("LLM Reply to " + ":")
+	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print), llm.WithEmbeddingPrefix(category))
 	response := queryResult.Response
 	resDocs := queryResult.RagDocs
 	if err != nil {
@@ -79,8 +80,15 @@ func embedd(llm aillm.LLMContainer) {
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
+	//llm.WithEmbeddingPrefix() will provide searching in a different category
+	llm.EmbeddText("SemMapas", contents, llm.WithEmbeddingPrefix("Company"))
 
-	llm.EmbeddText("SemMapas", contents)
+	contents = make(map[string]aillm.LLMEmbeddingContent)
+	contents["en"] = aillm.LLMEmbeddingContent{
+		Text: CropPestInfection,
+	}
+	llm.EmbeddText("CropPestInfection", contents, llm.WithEmbeddingPrefix("Agriculture"))
+
 }
 
 func print(ctx context.Context, chunk []byte) error {
@@ -93,3 +101,6 @@ With SemMapas, you can effortlessly map out venues, highlight points of interest
 Our platform goes beyond traditional mapping services, offering a comprehensive suite of features tailored to meet the diverse needs of event organizers and businesses alike. From tourism guides to event navigation, SemMapas empowers you to create immersive experiences that captivate your audience and enhance their journey.
 Our project has been launched since 2023 in Portugal and city of Lourinhã.
 `
+
+const CropPestInfection = `Crop pest infections pose a significant threat to global agriculture, affecting both food security and economic stability. Pests such as insects, fungi, nematodes, and weeds can devastate crops by feeding on plants, spreading diseases, or competing for nutrients. Common pests like locusts, aphids, and armyworms can quickly infest fields, leading to severe yield losses, particularly in regions heavily reliant on agriculture. For example, locust swarms have been known to destroy thousands of hectares of crops within days, causing famine and financial hardship. Factors such as climate change, monoculture farming, and the misuse of pesticides have exacerbated pest outbreaks, creating challenges for farmers worldwide.
+Addressing crop pest infections requires an integrated pest management (IPM) approach, combining cultural, biological, and chemical methods to minimize damage. Practices such as crop rotation, resistant crop varieties, and natural predators like ladybugs and parasitic wasps help control pest populations sustainably. Innovations in technology, including drone surveillance, precision agriculture, and biopesticides, have further enhanced farmers' ability to detect and combat pests early. However, global collaboration, research, and education are essential to develop scalable solutions, particularly for smallholder farmers in vulnerable regions. By investing in these strategies, it is possible to mitigate the impact of pest infections and ensure a stable food supply for growing populations. There are a lot of farms exists nearby Paris.`

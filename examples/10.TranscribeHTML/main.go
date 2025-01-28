@@ -32,41 +32,40 @@ func main() {
 	llm := aillm.LLMContainer{
 		Embedder:  embeddingllmclient,
 		LLMClient: llmclient,
-		DataRedis: aillm.RedisClient{
+		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
 	llm.Init()
-	embeddingId := "MyId"
-	embeddingTitle := "rawText"
 
 	// Let's create an empty index:
-	embedd(llm, embeddingId,embeddingTitle,"Hi")
+	embedd(llm, "Hi")
 	// asking  "What is SemMapas?" won't return any value
-	askKLLM(llm, embeddingId, "en", "User1", "What is SemMapas?")
+	askKLLM(llm, "What is SemMapas?")
 
 	// let's embed a html file
-	
-	EmbeddingId := "MyId"
- 
-	llm.EmbeddFile(EmbeddingId, "SampleFile", llm.Transcriber.TempFolder+"\\semmapas.html", aillm.TranscribeConfig{
-		Language:     "en",
+
+	llm.EmbeddFile("SampleFile", llm.Transcriber.TempFolder+"\\semmapas.html", aillm.TranscribeConfig{
+		Language: "en",
 	})
-	
+
 	// Now it knows :-)
-	askKLLM(llm, embeddingId, "en", "User1", "What is SemMapas?")
+	askKLLM(llm, "What is SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
 
 	// Cleanup
-	removeEmbedd(llm, embeddingId, embeddingTitle)
-	removeEmbedd(llm, embeddingId, "")
+	llm.RemoveEmbeddingDataFromRedis("SampleFile")
+	llm.RemoveEmbeddingDataFromRedis("")
 
 }
 
-func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) {
-	log.Println("LLM Reply to " + query + " from " + user + ":")
-	response, resDocs, err := llm.AskLLM(EmbeddingId, Language, user, query, print)
-	if err!=nil{
+func askKLLM(llm aillm.LLMContainer,   query string) {
+	log.Println("LLM Reply to " + query  + ":")
+	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
+	response := queryResult.Response
+	resDocs := queryResult.RagDocs
+
+	if err != nil {
 		panic(err)
 	}
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
@@ -78,20 +77,16 @@ func askKLLM(llm aillm.LLMContainer, EmbeddingId, Language, user, query string) 
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}
-	 
+
 }
 
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
-	llm.RemoveEmbeddingDataFromRedis(embeddingId, title)
-}
-
-func embedd(llm aillm.LLMContainer, EmbeddingId , EmbeddingTitle,Content string) {
+func embedd(llm aillm.LLMContainer, Content string) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: Content,
 	}
-	llm.EmbeddText(EmbeddingId, "SemMapas", contents)
+	llm.EmbeddText("SampleFile", contents)
 }
 func print(ctx context.Context, chunk []byte) error {
 	fmt.Print(string(chunk))

@@ -21,16 +21,37 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// LLMEmbeddingContent represents a single piece of text content that is embedded and stored in the system.
+//
+// This struct holds the necessary information for managing and identifying embedded text,
+// including the raw text, a title, its source, and associated keys.
+//
+// Fields:
+//   - Text: The raw text content that is embedded.
+//   - Title: A descriptive title for the embedded content.
+//   - Source: The origin of the content, such as a file name, URL, or other identifier.
+//   - Keys: A slice of strings representing the Redis keys associated with this content.
 type LLMEmbeddingContent struct {
 	Text   string `json:"Text" redis:"Text"`
 	Title  string `json:"Title" redis:"Title"`
 	Source string `json:"Source" redis:"Source"`
 	Keys   []string
 }
+
+// LLMEmbeddingObject represents a collection of embedded text contents grouped under a specific object ID.
+//
+// This struct serves as a container for multiple pieces of embedded text content, organized by language or context.
+// It provides a way to store and manage embeddings for a specific use case or document.
+//
+// Fields:
+//   - EmbeddingPrefix: A unique prefix or identifier for the embedding object (e.g., "ObjectId").
+//   - Title: A title for the embedding object, providing a meaningful description.
+//   - Contents: A map of language-specific content, where the key is the language code (e.g., "en", "pt")
+//               and the value is an LLMEmbeddingContent struct containing the associated content details.
 type LLMEmbeddingObject struct {
-	ObjectId string                         `json:"ObjectId" redis:"ObjectId"`
-	Title    string                         `json:"Title" redis:"Title"`
-	Contents map[string]LLMEmbeddingContent `json:"Contents" redis:"Contents"`
+	EmbeddingPrefix string                         `json:"EmbeddingPrefix" redis:"EmbeddingPrefix"`
+	Title           string                         `json:"Title" redis:"Title"`
+	Contents        map[string]LLMEmbeddingContent `json:"Contents" redis:"Contents"`
 }
 
 // getRawDocRedisId generates a unique Redis key for storing raw document data.
@@ -40,7 +61,7 @@ type LLMEmbeddingObject struct {
 //   - A string representing the Redis key in the format "rawDocs:ObjectId:Title".
 func (llmeo LLMEmbeddingObject) getRawDocRedisId() string {
 	// Construct Redis key using object ID and sanitized title
-	return "rawDocs:" + llmeo.ObjectId + ":" + llmeo.sanitizeRedisKey(llmeo.Title)
+	return "rawDocs:" + llmeo.EmbeddingPrefix + ":" + llmeo.sanitizeRedisKey(llmeo.Title)
 }
 
 // EmbeddFile processes and embeds the content of a given file into the LLM system.
@@ -54,7 +75,8 @@ func (llmeo LLMEmbeddingObject) getRawDocRedisId() string {
 // Returns:
 //   - LLMEmbeddingObject: The embedded object containing the processed content.
 //   - error: An error if any issues occur during processing.
-func (llm LLMContainer) EmbeddFile(ObjectId, Title, fileName string, tc TranscribeConfig) (LLMEmbeddingObject, error) {
+func (llm LLMContainer) EmbeddFile(Title, fileName string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
+
 	var result LLMEmbeddingObject
 	EmbeddingContents := make(map[string]LLMEmbeddingContent)
 	// Transcribe the file to extract text content
@@ -71,7 +93,7 @@ func (llm LLMContainer) EmbeddFile(ObjectId, Title, fileName string, tc Transcri
 	}
 
 	// Embed the transcribed text into the LLM system
-	embeddedTextObjects, embedErr := llm.EmbeddText(ObjectId, Title, EmbeddingContents)
+	embeddedTextObjects, embedErr := llm.EmbeddText(Title, EmbeddingContents, options...)
 	if embedErr != nil {
 		return result, embedErr
 	}
@@ -89,7 +111,8 @@ func (llm LLMContainer) EmbeddFile(ObjectId, Title, fileName string, tc Transcri
 // Returns:
 //   - LLMEmbeddingObject: The embedded object containing the processed content.
 //   - error: An error if any issues occur during the transcription or embedding process.
-func (llm LLMContainer) EmbeddURL(ObjectId, Title, url string, tc TranscribeConfig) (LLMEmbeddingObject, error) {
+func (llm LLMContainer) EmbeddURL(Title, url string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
+
 	var result LLMEmbeddingObject
 	EmbeddingContents := make(map[string]LLMEmbeddingContent)
 	// Transcribe the content from the provided URL
@@ -106,7 +129,9 @@ func (llm LLMContainer) EmbeddURL(ObjectId, Title, url string, tc TranscribeConf
 	}
 
 	// Embed the transcribed text into the LLM system
-	embeddedTextObjects, embedErr := llm.EmbeddText(ObjectId, Title, EmbeddingContents)
+	// o := LLMCallOptions{}
+	// for _, opt := range options {opt(&o)}
+	embeddedTextObjects, embedErr := llm.EmbeddText(Title, EmbeddingContents, options...)
 	if embedErr != nil {
 		return result, embedErr
 	}
@@ -125,19 +150,25 @@ func (llm LLMContainer) EmbeddURL(ObjectId, Title, url string, tc TranscribeConf
 // Returns:
 //   - LLMEmbeddingObject: The resulting embedding object after processing and storage.
 //   - error: An error if any issues occur during embedding or Redis operations.
-func (llm *LLMContainer) EmbeddText(ObjectId, Title string, Contents map[string]LLMEmbeddingContent) (LLMEmbeddingObject, error) {
+func (llm *LLMContainer) EmbeddText(Title string, Contents map[string]LLMEmbeddingContent, options ...LLMCallOption) (LLMEmbeddingObject, error) {
+
+	o := LLMCallOptions{}
+	for _, opt := range options {
+		opt(&o)
+	}
+
 	result := LLMEmbeddingObject{
-		ObjectId: ObjectId,
+		EmbeddingPrefix: o.getEmbeddingPrefix(),
 		Title:    Title,
 	}
 
 	// Load existing data from Redis if available
-	result.Load(llm.DataRedis.redisClient, result.getRawDocRedisId())
+	result.Load(llm.RedisClient.redisClient, result.getRawDocRedisId())
 
 	// Delete existing Redis keys associated with the content
 	for _, EmbeddingContents := range result.Contents {
 		for _, key := range EmbeddingContents.Keys {
-			llm.deleteRedisWildCard(llm.DataRedis.redisClient, key)
+			llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
 
 		}
 	}
@@ -147,7 +178,7 @@ func (llm *LLMContainer) EmbeddText(ObjectId, Title string, Contents map[string]
 
 	// Process embedding for each language in contents
 	for language, content := range Contents {
-		tempKeys, _, err := llm.embedText(ObjectId+":"+language+":", llm.Transcriber.cleanupText(content.Text), content.Title, content.Source)
+		tempKeys, _, err := llm.embedText(o.getEmbeddingPrefix()+":"+language+":", llm.Transcriber.cleanupText(content.Text), content.Title, content.Source)
 		if err != nil {
 			return result, err
 		}
@@ -309,7 +340,7 @@ func (llmEO LLMEmbeddingObject) List(rdb *redis.Client, KeyID string, offset, li
 //   - error: An error if the save operation fails.
 func (llm *LLMContainer) saveEmbeddingDataToRedis(obj LLMEmbeddingObject) error {
 	// Store the embedding object in Redis using its generated key
-	return obj.Save(llm.DataRedis.redisClient, obj.getRawDocRedisId())
+	return obj.Save(llm.RedisClient.redisClient, obj.getRawDocRedisId())
 }
 
 // RemoveEmbeddingDataFromRedis deletes an embedding object and its associated keys from Redis.
@@ -320,18 +351,23 @@ func (llm *LLMContainer) saveEmbeddingDataToRedis(obj LLMEmbeddingObject) error 
 //
 // Returns:
 //   - error: An error if deletion fails.
-func (llm *LLMContainer) RemoveEmbeddingDataFromRedis(ObjectId, Title string) error {
+func (llm *LLMContainer) RemoveEmbeddingDataFromRedis(Title string, options ...LLMCallOption) error {
+
+	o := LLMCallOptions{}
+	for _, opt := range options {
+		opt(&o)
+	}
 	llmo := LLMEmbeddingObject{
-		ObjectId: ObjectId,
+		EmbeddingPrefix: o.getEmbeddingPrefix(),
 		Title:    Title,
 	}
 	// Load the embedding object from Redis
-	llmo.Load(llm.DataRedis.redisClient, llmo.getRawDocRedisId())
+	llmo.Load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
 
 	// Delete all associated keys stored in Redis
 	for _, content := range llmo.Contents {
 		for _, key := range content.Keys {
-			_, err := llm.deleteRedisWildCard(llm.DataRedis.redisClient, key)
+			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
 			if err != nil {
 				return err
 			}
@@ -339,5 +375,5 @@ func (llm *LLMContainer) RemoveEmbeddingDataFromRedis(ObjectId, Title string) er
 	}
 
 	// Remove the embedding object from Redis
-	return llmo.Delete(llm.DataRedis.redisClient, llmo.getRawDocRedisId())
+	return llmo.Delete(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
 }
