@@ -79,9 +79,9 @@ func (llm *LLMContainer) Init() error {
 
 	// Establish a connection to the Redis server
 	llm.RedisClient.redisClient = redis.NewClient(&redis.Options{
-		Addr:     llm.RedisClient.Host,     
-		Password: llm.RedisClient.Password, 
-		DB:       0,                        
+		Addr:     llm.RedisClient.Host,
+		Password: llm.RedisClient.Password,
+		DB:       0,
 	})
 	ctx := context.Background()
 	// Test Redis connection
@@ -105,7 +105,7 @@ func (llm *LLMContainer) Init() error {
 		llm.RagRowCount = 5
 	}
 
-	if llm.AnswerLanguage==""{
+	if llm.AnswerLanguage == "" {
 		llm.AnswerLanguage = "English"
 	}
 
@@ -147,7 +147,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	for _, opt := range options {
 		opt(&o)
 	}
-	result.addAction("Start", o.ActionCallFunc)
+	result.addAction("Start Calling LLM", o.ActionCallFunc)
 
 	mem, exists := llm.MemoryManager.GetMemory(o.SessionID)
 
@@ -169,7 +169,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		}
 	}
 	// Initialize the LLM client for processing
-	result.addAction("Vector Search", o.ActionCallFunc)
+	result.addAction("Vector Search Start", o.ActionCallFunc)
 
 	llmclient, err := llm.LLMClient.NewLLMClient()
 	if err != nil {
@@ -244,7 +244,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0
 
 	}
-	result.addAction("Prompt Generation", o.ActionCallFunc)
+	result.addAction("Prompt Generation Start", o.ActionCallFunc)
 
 	var curMessageContent llms.MessageContent
 	var ragArray []llms.ContentPart
@@ -269,10 +269,9 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	if !hasRag {
 		if !llm.AllowHallucinate {
 			if llm.NoRagErrorMessage != "" {
-				ragText = languageCapabilityDetectionFunction + `
-				You are an AI assistant, Think step-by-step before answer.
-				your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
-				Assistant:`
+				ragText = languageCapabilityDetectionFunction + `You are an AI assistant, Think step-by-step before answer.
+your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
+Assistant:`
 
 				msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, ragText))
 			} else {
@@ -280,8 +279,11 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			}
 		}
 	} else {
-		for _, doc := range resDocs.([]schema.Document) {
-			ragText += "\n" + doc.PageContent
+		for idx, doc := range resDocs.([]schema.Document) {
+			if idx > 0 {
+				ragText += "\n"
+			}
+			ragText += doc.PageContent
 		}
 		ragText = languageCapabilityDetectionFunction + `
 		You are an AI assistant with knowledge only and only just this text: "` + ragText + `".
@@ -309,7 +311,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, QueryWithMemory))
 	memoryAddAllowed := hasRag
 	isFirstWord := true
-	result.addAction("Calling LLM", o.ActionCallFunc)
+	result.addAction("Sending Request to LLM", o.ActionCallFunc)
 	isFirstChunk := true
 	// Generate content using the LLM and stream results via the provided callback function
 	response, err := llmclient.GenerateContent(ctx,
@@ -319,7 +321,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
 			if isFirstChunk {
 				isFirstChunk = false
-				result.addAction("First Chunk", o.ActionCallFunc)
+				result.addAction("First Chunk Received", o.ActionCallFunc)
 			}
 			if isFirstWord && len(chunk) > 0 {
 				startsWithAt := chunk[0] == 64
@@ -427,7 +429,7 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 	}
 }
 
-func (o *LLMCallOptions) getEmbeddingPrefix()string {
+func (o *LLMCallOptions) getEmbeddingPrefix() string {
 	if o.Prefix == "" {
 		o.Prefix = "default"
 	}

@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/tmc/langchaingo/vectorstores"
 	"github.com/tmc/langchaingo/vectorstores/redisvector"
@@ -69,7 +70,7 @@ func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, Sc
 		vectorstores.WithEmbedder(embedder),
 	}
 	results, err := store.SimilaritySearch(ctx, Query, rowCount, optionsVector...)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(),"no such index")  {
 		return nil, fmt.Errorf("search error: %v", err)
 	}
 	return results, nil
