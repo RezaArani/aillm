@@ -266,9 +266,9 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 
 	// If no relevant documents found, handle response accordingly
 
-	if !hasRag {
+	if !hasRag && o.ExtraContext=="" {
 		if !llm.AllowHallucinate {
-			if llm.NoRagErrorMessage != "" {
+			if llm.NoRagErrorMessage != ""   {
 				ragText = languageCapabilityDetectionFunction + `You are an AI assistant, Think step-by-step before answer.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
 Assistant:`
@@ -285,11 +285,12 @@ Assistant:`
 			}
 			ragText += doc.PageContent
 		}
-		ragText = languageCapabilityDetectionFunction + `
-		You are an AI assistant with knowledge only and only just this text: "` + ragText + `".
-		Think step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."
-		User: "` + Query + `"
-		Assistant:`
+		ragText+="\n"+o.ExtraContext
+		ragText = languageCapabilityDetectionFunction + 
+		`\nYou are an AI assistant with knowledge only and only just this text: "` + ragText + `". `+
+		`\nThink step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."`+
+		`\nUser: "` + Query + `"`+
+		`\nAssistant:`
 		ragArray = append(ragArray, llms.TextPart(ragText))
 		curMessageContent.Parts = ragArray
 		curMessageContent.Role = llms.ChatMessageTypeSystem
@@ -428,7 +429,23 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 		o.Prefix = Prefix
 	}
 }
-
+ 
+// WithExtraExtraContext specifies a extra context for search
+//
+// Parameters:
+//   - ExtraContext: Extra provided text to provide LLM.
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
+func (llm *LLMContainer) WithExtraExtraContext(ExtraContext string) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		if ExtraContext == "" {
+			ExtraContext = "default"
+		}
+		o.ExtraContext = ExtraContext
+	}
+}
+ 
 func (o *LLMCallOptions) getEmbeddingPrefix() string {
 	if o.Prefix == "" {
 		o.Prefix = "default"
