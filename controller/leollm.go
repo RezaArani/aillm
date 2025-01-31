@@ -76,6 +76,7 @@ type LLMCallOptions struct {
 	Language string
 	SessionID string
 	ExtraContext string
+	ExactPrompt string
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.

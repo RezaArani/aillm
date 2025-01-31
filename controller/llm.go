@@ -152,165 +152,174 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	mem, exists := llm.MemoryManager.GetMemory(o.SessionID)
 
 	ctx := context.Background()
-	// Check if LLM client is available
-
-	if llm.LLMClient == nil {
-		return result, errors.New("missing llm client")
-	}
-	// Check if embedding model is available
-
-	if llm.Embedder == nil {
-		return result, errors.New("missing embedding model")
-	} else {
-		// Initialize embedding model if not already initialized
-
-		if !llm.Embedder.initialized() {
-			llm.InitEmbedding()
-		}
-	}
-	// Initialize the LLM client for processing
-	result.addAction("Vector Search Start", o.ActionCallFunc)
-
+	memoryAddAllowed := false
 	llmclient, err := llm.LLMClient.NewLLMClient()
-	if err != nil {
-		return result, err
-	}
 	var msgs []llms.MessageContent
-	// Add AI assistant's character/personality setting
-	if llm.Character != "" {
-		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, llm.Character))
-	}
-	// Construct the query prefix for the embedding store
-	KNNPrefix := o.getEmbeddingPrefix() + ":"
-	if o.Language == "" {
-		if llm.FallbackLanguage != "" {
-			o.Language = llm.FallbackLanguage
-		} else {
-			// return result, errors.New("missing language. you can use fallback language if you want to use backup contents")
-			o.Language = "en"
-		}
-	}
-	KNNPrefix += o.Language + ":"
-	KNNQuery := Query
-
-	// Append past session queries to provide context
-
-	for _, memoryItem := range mem.Questions {
-		KNNQuery += "\n" + memoryItem
-	}
-	// KNNQuery += Query
-
-	/*** Change algorithm to The k-nearest neighbors (KNN) algorithm **/
+	hasRag :=false
 	var resDocs interface{}
-	var KNNGetErr error
 
-	switch llm.SearchAlgorithm {
-	case SimilaritySearch:
-		// Retrieve related documents using cosine similarity search
+	// check exact prompt provided or not
+	if o.ExactPrompt == "" {
+		// Check if LLM client is available
 
-		resDocs, KNNGetErr = llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
-	case KNearestNeighbors:
-		// Retrieve related documents using KNN search
-		resDocs, KNNGetErr = llm.FindKNN(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
-	default:
-		return result, errors.New("unknown search algorithm")
-	}
-
-	if KNNGetErr != nil {
-		if !llm.AllowHallucinate {
-			return result, KNNGetErr
+		if llm.LLMClient == nil {
+			return result, errors.New("missing llm client")
 		}
-	}
-	// Check if relevant documents were retrieved
-	hasRag := resDocs != nil && len(resDocs.([]schema.Document)) > 0
-	if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
+		// Check if embedding model is available
+
+		if llm.Embedder == nil {
+			return result, errors.New("missing embedding model")
+		} else {
+			// Initialize embedding model if not already initialized
+
+			if !llm.Embedder.initialized() {
+				llm.InitEmbedding()
+			}
+		}
+		// Initialize the LLM client for processing
+		result.addAction("Vector Search Start", o.ActionCallFunc)
+
+		if err != nil {
+			return result, err
+		}
+		// Add AI assistant's character/personality setting
+		if llm.Character != "" {
+			msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, llm.Character))
+		}
+		// Construct the query prefix for the embedding store
+		KNNPrefix := o.getEmbeddingPrefix() + ":"
+		if o.Language == "" {
+			if llm.FallbackLanguage != "" {
+				o.Language = llm.FallbackLanguage
+			} else {
+				// return result, errors.New("missing language. you can use fallback language if you want to use backup contents")
+				o.Language = "en"
+			}
+		}
+		KNNPrefix += o.Language + ":"
+		KNNQuery := Query
+
+		// Append past session queries to provide context
+
+		for _, memoryItem := range mem.Questions {
+			KNNQuery += "\n" + memoryItem
+		}
+		// KNNQuery += Query
+
+		/*** Change algorithm to The k-nearest neighbors (KNN) algorithm **/
+		var KNNGetErr error
 
 		switch llm.SearchAlgorithm {
 		case SimilaritySearch:
-			resDocs, KNNGetErr = llm.CosineSimilarity(o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":", KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			// Retrieve related documents using cosine similarity search
+
+			resDocs, KNNGetErr = llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 		case KNearestNeighbors:
-			resDocs, KNNGetErr = llm.FindKNN(o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":", KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			// Retrieve related documents using KNN search
+			resDocs, KNNGetErr = llm.FindKNN(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 		default:
 			return result, errors.New("unknown search algorithm")
 		}
 
-		// resDocs, KNNGetErr := llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
-		// resDocs, KNNGetErr = llm.FindKNN(prefix+":"+llm.FallbackLanguage+":", Query, llm.RagRowCount, llm.ScoreThreshold)
 		if KNNGetErr != nil {
 			if !llm.AllowHallucinate {
 				return result, KNNGetErr
 			}
 		}
+		// Check if relevant documents were retrieved
 		hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0
 
-	}
-	result.addAction("Prompt Generation Start", o.ActionCallFunc)
+		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
 
-	var curMessageContent llms.MessageContent
-	var ragArray []llms.ContentPart
-	ragText := ""
+			switch llm.SearchAlgorithm {
+			case SimilaritySearch:
+				resDocs, KNNGetErr = llm.CosineSimilarity(o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":", KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			case KNearestNeighbors:
+				resDocs, KNNGetErr = llm.FindKNN(o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":", KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			default:
+				return result, errors.New("unknown search algorithm")
+			}
 
-	// Prepare the language detection function based on the query
-	languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
-	languageCapabilityDetectionText := `detected language without mentioning it.`
-	if llm.LLMModelLanguageDetectionCapability {
-		languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `")`
-		languageCapabilityDetectionText = "{language}"
+			// resDocs, KNNGetErr := llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			// resDocs, KNNGetErr = llm.FindKNN(prefix+":"+llm.FallbackLanguage+":", Query, llm.RagRowCount, llm.ScoreThreshold)
+			if KNNGetErr != nil {
+				if !llm.AllowHallucinate {
+					return result, KNNGetErr
+				}
+			}
+			hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0
 
-	} else {
-		if llm.AnswerLanguage != "" {
-			languageCapabilityDetectionFunction = ""
-			languageCapabilityDetectionText = llm.AnswerLanguage
 		}
-	}
+		result.addAction("Prompt Generation Start", o.ActionCallFunc)
 
-	// If no relevant documents found, handle response accordingly
+		var curMessageContent llms.MessageContent
+		var ragArray []llms.ContentPart
+		ragText := ""
 
-	if !hasRag && o.ExtraContext=="" {
-		if !llm.AllowHallucinate {
-			if llm.NoRagErrorMessage != ""   {
-				ragText = languageCapabilityDetectionFunction + `You are an AI assistant, Think step-by-step before answer.
+		// Prepare the language detection function based on the query
+		languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
+		languageCapabilityDetectionText := `detected language without mentioning it.`
+		if llm.LLMModelLanguageDetectionCapability {
+			languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response `
+			languageCapabilityDetectionText = "{language}"
+
+		} else {
+			if llm.AnswerLanguage != "" {
+				languageCapabilityDetectionFunction = ""
+				languageCapabilityDetectionText = llm.AnswerLanguage
+			}
+		}
+
+		// If no relevant documents found, handle response accordingly
+
+		if !hasRag && o.ExtraContext == "" {
+			if !llm.AllowHallucinate {
+				if llm.NoRagErrorMessage != "" {
+					ragText = languageCapabilityDetectionFunction + `You are an AI assistant, Think step-by-step before answer.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
 Assistant:`
 
-				msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, ragText))
-			} else {
-				return result, errors.New("rag query has no results and hallucination is allowed but NoRagErrorMessage is empty")
+					msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, ragText))
+				} else {
+					return result, errors.New("rag query has no results and hallucination is allowed but NoRagErrorMessage is empty")
+				}
 			}
-		}
-	} else {
-		for idx, doc := range resDocs.([]schema.Document) {
-			if idx > 0 {
-				ragText += "\n"
+		} else {
+			for idx, doc := range resDocs.([]schema.Document) {
+				if idx > 0 {
+					ragText += "\n"
+				}
+				ragText += doc.PageContent
 			}
-			ragText += doc.PageContent
-		}
-		ragText+="\n"+o.ExtraContext
-		ragText = languageCapabilityDetectionFunction + 
-		`\nYou are an AI assistant with knowledge only and only just this text: "` + ragText + `". `+
-		`\nThink step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."`+
-		`\nUser: "` + Query + `"`+
-		`\nAssistant:`
-		ragArray = append(ragArray, llms.TextPart(ragText))
-		curMessageContent.Parts = ragArray
-		curMessageContent.Role = llms.ChatMessageTypeSystem
-		msgs = append(msgs, curMessageContent)
-	}
-
-	// Include session history in the query
-
-	QueryWithMemory := Query
-
-	if len(mem.Questions) > 0 {
-		QueryWithMemory += "Here is the context from our previous interactions:\n"
-		for idx, q := range mem.Questions {
-			QueryWithMemory += "\t" + strconv.Itoa(idx) + "." + q + "\n"
+			ragText += "\n" + o.ExtraContext
+			ragText = languageCapabilityDetectionFunction +
+				`\nYou are an AI assistant with knowledge only and only just this text: "` + ragText + `". ` +
+				`\nThink step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."` +
+				`\nUser: "` + Query + `"` +
+				`\nAssistant:`
+			ragArray = append(ragArray, llms.TextPart(ragText))
+			curMessageContent.Parts = ragArray
+			curMessageContent.Role = llms.ChatMessageTypeSystem
+			msgs = append(msgs, curMessageContent)
 		}
 
-	}
+		// Include session history in the query
 
-	msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, QueryWithMemory))
-	memoryAddAllowed := hasRag
+		QueryWithMemory := Query
+
+		if len(mem.Questions) > 0 {
+			QueryWithMemory += "Here is the context from our previous interactions:\n"
+			for idx, q := range mem.Questions {
+				QueryWithMemory += "\t" + strconv.Itoa(idx) + "." + q + "\n"
+			}
+
+		}
+
+		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, QueryWithMemory))
+		memoryAddAllowed = hasRag
+	}else{
+		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, o.ExactPrompt))
+	}
 	isFirstWord := true
 	result.addAction("Sending Request to LLM", o.ActionCallFunc)
 	isFirstChunk := true
@@ -429,7 +438,7 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 		o.Prefix = Prefix
 	}
 }
- 
+
 // WithExtraExtraContext specifies a extra context for search
 //
 // Parameters:
@@ -439,13 +448,23 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 //   - LLMCallOption: An option that sets the embedding prefix.
 func (llm *LLMContainer) WithExtraExtraContext(ExtraContext string) LLMCallOption {
 	return func(o *LLMCallOptions) {
-		if ExtraContext == "" {
-			ExtraContext = "default"
-		}
 		o.ExtraContext = ExtraContext
 	}
 }
- 
+
+// WithExtraExactPromot queries LLM with exact promot.
+//
+// Parameters:
+//   - ExactPromot: string, prompt
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
+func (llm *LLMContainer) WithExactPromot(ExactPrompt string) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.ExactPrompt = ExactPrompt
+	}
+}
+
 func (o *LLMCallOptions) getEmbeddingPrefix() string {
 	if o.Prefix == "" {
 		o.Prefix = "default"
