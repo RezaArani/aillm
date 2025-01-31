@@ -446,7 +446,7 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 //
 // Returns:
 //   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithExtraExtraContext(ExtraContext string) LLMCallOption {
+func (llm *LLMContainer) WithExtraContext(ExtraContext string) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		o.ExtraContext = ExtraContext
 	}
