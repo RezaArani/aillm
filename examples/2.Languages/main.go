@@ -30,11 +30,11 @@ func main() {
 	}
 
 	llm.Init()
-	embeddingTitle := "rawText"
+	embeddingIndex := "rawText"
 
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingTitle)
+	embedd(llm, embeddingIndex)
 	// looks for the data in "en" language contents
 	askKLLM(llm, "en", "What is SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
@@ -48,7 +48,7 @@ func main() {
 	// looks for the data in "pt" language contents, so based on ptRawText sample, result should be just 2023
 	askKLLM(llm, "en", "When did it launched?")
 	// Now removing embedded data and asking the same question, result should be I'm unable to provide a specific location regarding the launch of SemMapas as I don't have sufficient information on this topic.
-	llm.RemoveEmbeddingDataFromRedis(embeddingTitle)
+	llm.RemoveEmbedding(embeddingIndex)
 	askKLLM(llm, "pt", "Where did it launched?")
 
 }
@@ -73,7 +73,7 @@ func askKLLM(llm aillm.LLMContainer, Language, query string) {
 
 }
  
-func embedd(llm aillm.LLMContainer, Title string) {
+func embedd(llm aillm.LLMContainer, Index string) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
@@ -82,7 +82,7 @@ func embedd(llm aillm.LLMContainer, Title string) {
 	contents["pt"] = aillm.LLMEmbeddingContent{
 		Text: ptRawText,
 	}
-	llm.EmbeddText(Title, contents)
+	llm.EmbeddText(Index, contents)
 
 }
 

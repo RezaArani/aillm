@@ -103,19 +103,21 @@ func (llm *LLMContainer) InitEmbedding() error {
 // Parameters:
 //   - prefix: A string used as a prefix for storing the embedded content, typically indicating object context.
 //   - contents: The text content to be embedded and stored in the vector store.
-//   - title: The title associated with the content to be embedded.
+// 	 - title: The title associated with the content to be embedded inline with contents for better retrival.
+//   - Index: The Index associated with the content to be embedded.
 //   - source: Source of selected data.
 
 // Returns:
 //   - []string: A slice of keys representing the stored embeddings in the vector database.
 //   - int: The number of chunks the text was split into.
 //   - error: An error if the embedding process fails.
-func (llm *LLMContainer) embedText(prefix, contents, title, source string) ([]string, int, error) {
+func (llm *LLMContainer) embedText(prefix,language, title, contents, source string) ([]string, []string, int, error) {
 	var docList []string
+	var generalDocList []string
 	// Check if the embedding model is available
 
 	if llm.Embedder == nil {
-		return nil, 0, errors.New("missing embedding model")
+		return nil, nil, 0, errors.New("missing embedding model")
 	} else {
 		// Initialize embedding model if it hasn't been initialized yet
 
@@ -133,10 +135,10 @@ func (llm *LLMContainer) embedText(prefix, contents, title, source string) ([]st
 	// Split the text content into chunks
 	docs, splitErr := textEmbedding.SplitText()
 	if splitErr != nil {
-		return docList, 0, splitErr
+		return docList, generalDocList, 0, splitErr
 	}
 
-	// Add metadata to each chunk by prepending the title
+	// Add metadata to each chunk by prepending the source
 	if source != "" {
 		for idx, doc := range docs {
 			doc.PageContent = "source: " + source + "\n" + doc.PageContent
@@ -153,7 +155,7 @@ func (llm *LLMContainer) embedText(prefix, contents, title, source string) ([]st
 	// Get the embedding model from the initialized client
 	embedder, err := llm.Embedder.NewEmbedder()
 	if err != nil {
-		return docList, 0, err
+		return docList, generalDocList, 0, splitErr
 	}
 
 	// Setup Redis vector store with index name and embedding model
@@ -163,14 +165,14 @@ func (llm *LLMContainer) embedText(prefix, contents, title, source string) ([]st
 	// Retrieve Redis host URL for connection
 	redisHostURL, redisConnectionErr := llm.getRedisHost()
 	if redisConnectionErr != nil {
-		return docList, 0, redisConnectionErr
+		return docList, generalDocList, 0, splitErr
 	}
 
 	// Create a new vector store using Redis and embedding model
 
 	store, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), redisVector, embedderVector)
 	if err != nil {
-		return docList, 0, err
+		return docList, generalDocList, 0, splitErr
 	}
 
 	// Store the document chunks into the Redis vector store
@@ -178,9 +180,22 @@ func (llm *LLMContainer) embedText(prefix, contents, title, source string) ([]st
 	if docLen > 0 {
 		docList, err = store.AddDocuments(context.Background(), docs)
 		if err != nil {
-			return docList, 0, err
+			return docList, generalDocList, 0, splitErr
 		}
+
+		generalRedisVector := redisvector.WithIndexName("all:"+language+":aillm_vector_idx", true)
+		generalStore, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), generalRedisVector, embedderVector)
+		if err != nil {
+			return docList, generalDocList, 0, splitErr
+		}
+
+		generalDocList, err = generalStore.AddDocuments(context.Background(), docs)
+		if err != nil {
+			return docList, generalDocList, 0, splitErr
+		}
+
+
 	}
 
-	return docList, docLen, nil
+	return docList, generalDocList, docLen, nil
 }

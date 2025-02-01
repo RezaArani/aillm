@@ -53,7 +53,7 @@ func main() {
 	// looks for the data in "pt" language contents but replies in English
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("SemMapas")
+	llm.RemoveEmbedding("SemMapas")
 
 }
 
@@ -77,7 +77,7 @@ func askKLLM(llm aillm.LLMContainer, query string) {
 
 }
 
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, title string) {
+func removeEmbedd(llm aillm.LLMContainer, embeddingId, Index string) {
 }
 
 func embedd(llm aillm.LLMContainer, Content string) {

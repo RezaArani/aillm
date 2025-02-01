@@ -49,8 +49,8 @@ func main() {
 	askKLLM(llm, "Agriculture", "Tell me about crop infection.")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("CropPestInfection", llm.WithEmbeddingPrefix("Agriculture"))
-	llm.RemoveEmbeddingDataFromRedis("SemMapas", llm.WithEmbeddingPrefix("Company"))
+	llm.RemoveEmbedding("CropPestInfection", llm.WithEmbeddingPrefix("Agriculture"))
+	llm.RemoveEmbedding("SemMapas", llm.WithEmbeddingPrefix("Company"))
 
 }
 

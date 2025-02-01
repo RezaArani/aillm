@@ -31,10 +31,10 @@ func main() {
 	}
 
 	llm.Init()
-	embeddingTitle := "rawText"
+	embeddingIndex := "rawText"
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingTitle)
+	embedd(llm, embeddingIndex)
 	// looks for the data in "en" language contents
 	askKLLM(llm, "en", "What is SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
@@ -45,7 +45,7 @@ func main() {
 	askKLLM(llm, "en", "چیه؟ SemMapas?")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis(embeddingTitle)
+	llm.RemoveEmbedding(embeddingIndex)
 
 }
 
@@ -69,7 +69,7 @@ func askKLLM(llm aillm.LLMContainer, Language, query string) {
 
 }
 
-func embedd(llm aillm.LLMContainer, Title string) {
+func embedd(llm aillm.LLMContainer, Index string) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
@@ -78,7 +78,7 @@ func embedd(llm aillm.LLMContainer, Title string) {
 	contents["pt"] = aillm.LLMEmbeddingContent{
 		Text: ptRawText,
 	}
-	llm.EmbeddText(Title, contents)
+	llm.EmbeddText(Index, contents)
 
 }
 

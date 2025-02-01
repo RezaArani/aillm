@@ -45,7 +45,7 @@ func main() {
 	askKLLM(llm, "What is SemMapas?")
 	// Now let's remove the embedding and the result should be something like I couldn't find any relevant information or a clear answer regarding your question about SemMapas.
 	log.Println("Removing Embedding:")
-	llm.RemoveEmbeddingDataFromRedis("SemMapas")
+	llm.RemoveEmbedding("SemMapas")
 	askKLLM(llm, "What is SemMapas?")
 	// Now let's rely on model data and hallucination and the result should be something like "SemMapas is a Brazilian navigation app that provides turn-by-turn directions and real-time traffic information." which is not correct.
 	llm.AllowHallucinate = true

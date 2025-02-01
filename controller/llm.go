@@ -155,7 +155,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	memoryAddAllowed := false
 	llmclient, err := llm.LLMClient.NewLLMClient()
 	var msgs []llms.MessageContent
-	hasRag :=false
+	hasRag := false
 	var resDocs interface{}
 
 	// check exact prompt provided or not
@@ -188,15 +188,20 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		}
 		// Construct the query prefix for the embedding store
 		KNNPrefix := o.getEmbeddingPrefix() + ":"
-		if o.Language == "" {
-			if llm.FallbackLanguage != "" {
-				o.Language = llm.FallbackLanguage
-			} else {
-				// return result, errors.New("missing language. you can use fallback language if you want to use backup contents")
-				o.Language = "en"
+		if o.searchAll {
+			// o.Prefix =
+			KNNPrefix = "all:" + o.searchAllLanguage + ":"
+		} else {
+			if o.Language == "" {
+				if llm.FallbackLanguage != "" {
+					o.Language = llm.FallbackLanguage
+				} else {
+					// return result, errors.New("missing language. you can use fallback language if you want to use backup contents")
+					o.Language = "en"
+				}
 			}
+			KNNPrefix += o.Language + ":"
 		}
-		KNNPrefix += o.Language + ":"
 		KNNQuery := Query
 
 		// Append past session queries to provide context
@@ -227,15 +232,19 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			}
 		}
 		// Check if relevant documents were retrieved
-		hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0
+		hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0 && o.ExtraContext == ""
 
 		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
-
+			searchPrefix := o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":"
+			if o.searchAll {
+				// o.Prefix =
+				searchPrefix = "all:" + llm.FallbackLanguage + ":"
+			}
 			switch llm.SearchAlgorithm {
 			case SimilaritySearch:
-				resDocs, KNNGetErr = llm.CosineSimilarity(o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":", KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				resDocs, KNNGetErr = llm.CosineSimilarity(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 			case KNearestNeighbors:
-				resDocs, KNNGetErr = llm.FindKNN(o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":", KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				resDocs, KNNGetErr = llm.FindKNN(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 			default:
 				return result, errors.New("unknown search algorithm")
 			}
@@ -317,7 +326,7 @@ Assistant:`
 
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, QueryWithMemory))
 		memoryAddAllowed = hasRag
-	}else{
+	} else {
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, o.ExactPrompt))
 	}
 	isFirstWord := true
@@ -438,6 +447,13 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 		o.Prefix = Prefix
 	}
 }
+func (llm *LLMContainer) SearchAll(language string) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		// o.Prefix = "all:"+language
+		o.searchAllLanguage = language
+		o.searchAll = true
+	}
+}
 
 // WithExtraExtraContext specifies a extra context for search
 //
@@ -459,7 +475,7 @@ func (llm *LLMContainer) WithExtraContext(ExtraContext string) LLMCallOption {
 //
 // Returns:
 //   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithExactPromot(ExactPrompt string) LLMCallOption {
+func (llm *LLMContainer) WithExactPrompt(ExactPrompt string) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		o.ExactPrompt = ExactPrompt
 	}
@@ -469,5 +485,5 @@ func (o *LLMCallOptions) getEmbeddingPrefix() string {
 	if o.Prefix == "" {
 		o.Prefix = "default"
 	}
-	return o.Prefix
+	return "context:" + o.Prefix
 }

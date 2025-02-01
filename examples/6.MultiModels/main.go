@@ -49,7 +49,7 @@ func main() {
 	askKLLM(llm, "SemMapas city and clients?")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("SemMapas")
+	llm.RemoveEmbedding("SemMapas")
 
 }
 

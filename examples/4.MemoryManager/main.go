@@ -50,8 +50,8 @@ func main() {
 	askKLLM(llm, "User1", "Where and when?")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("SemMapas")
-	llm.RemoveEmbeddingDataFromRedis("JohnDoe")
+	llm.RemoveEmbedding("SemMapas")
+	llm.RemoveEmbedding("JohnDoe")
 
 }
 

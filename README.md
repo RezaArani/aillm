@@ -114,7 +114,7 @@ func main() {
 	llm.Init()
 
 	//index name
-	embeddingTitle := "SemMapas Contents"
+	embeddingIndex := "SemMapas Contents"
 
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
@@ -125,7 +125,7 @@ func main() {
 	Our project has been launched since 2023 in Portugal.
 	`,
 	}
-	llm.EmbeddText(embeddingTitle, contents)
+	llm.EmbeddText(embeddingIndex, contents)
 	
 	// time to call LLM, Now it knows what is SemMapas
 	queryResult, err := llm.AskLLM("What is SemMapas?", llm.WithStreamingFunc(print))
@@ -133,7 +133,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	llm.RemoveEmbeddingDataFromRedis(embeddingTitle)
+	llm.RemoveEmbedding(embeddingIndex)
 	log.Println("TotalTokens: ", queryResult.Response.Choices[0].GenerationInfo["TotalTokens"])
 
 }

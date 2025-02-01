@@ -45,7 +45,7 @@ func main() {
 
 	// let's embed a html file
 
-	llm.EmbeddFile("SampleFile", llm.Transcriber.TempFolder+"\\semmapas.html", aillm.TranscribeConfig{
+	llm.EmbeddFile("SampleIndex","Sample Title", llm.Transcriber.TempFolder+"\\semmapas.html", aillm.TranscribeConfig{
 		Language: "en",
 	})
 
@@ -54,8 +54,8 @@ func main() {
 	// looks for the data in "pt" language contents but replies in English
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("SampleFile")
-	llm.RemoveEmbeddingDataFromRedis("")
+	llm.RemoveEmbedding("SampleIndex")
+	llm.RemoveEmbedding("")
 
 }
 

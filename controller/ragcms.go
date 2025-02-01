@@ -29,13 +29,16 @@ import (
 // Fields:
 //   - Text: The raw text content that is embedded.
 //   - Title: A descriptive title for the embedded content.
+//   - Index:
 //   - Source: The origin of the content, such as a file name, URL, or other identifier.
 //   - Keys: A slice of strings representing the Redis keys associated with this content.
 type LLMEmbeddingContent struct {
-	Text   string `json:"Text" redis:"Text"`
-	Title  string `json:"Title" redis:"Title"`
-	Source string `json:"Source" redis:"Source"`
-	Keys   []string
+	Text        string `json:"Text" redis:"Text"`
+	Title       string `json:"Title" redis:"Title"`
+	Index       string `json:"Index" redis:"Index"`
+	Source      string `json:"Source" redis:"Source"`
+	Keys        []string
+	GeneralKeys []string
 }
 
 // LLMEmbeddingObject represents a collection of embedded text contents grouped under a specific object ID.
@@ -45,37 +48,38 @@ type LLMEmbeddingContent struct {
 //
 // Fields:
 //   - EmbeddingPrefix: A unique prefix or identifier for the embedding object (e.g., "ObjectId").
-//   - Title: A title for the embedding object, providing a meaningful description.
+//   - Index: An Index for the embedding object, providing a future access.
 //   - Contents: A map of language-specific content, where the key is the language code (e.g., "en", "pt")
-//               and the value is an LLMEmbeddingContent struct containing the associated content details.
+//     and the value is an LLMEmbeddingContent struct containing the associated content details.
 type LLMEmbeddingObject struct {
 	EmbeddingPrefix string                         `json:"EmbeddingPrefix" redis:"EmbeddingPrefix"`
-	Title           string                         `json:"Title" redis:"Title"`
+	Index           string                         `json:"Index" redis:"Index"`
 	Contents        map[string]LLMEmbeddingContent `json:"Contents" redis:"Contents"`
 }
 
 // getRawDocRedisId generates a unique Redis key for storing raw document data.
-// It combines the object ID and a sanitized version of the title to create a consistent key format.
+// It combines the object ID and a sanitized version of the Index to create a consistent key format.
 //
 // Returns:
-//   - A string representing the Redis key in the format "rawDocs:ObjectId:Title".
+//   - A string representing the Redis key in the format "rawDocs:ObjectId:Index".
 func (llmeo LLMEmbeddingObject) getRawDocRedisId() string {
-	// Construct Redis key using object ID and sanitized title
-	return "rawDocs:" + llmeo.EmbeddingPrefix + ":" + llmeo.sanitizeRedisKey(llmeo.Title)
+	// Construct Redis key using object ID and sanitized Index
+	return "rawDocs:" + llmeo.EmbeddingPrefix + ":" + llmeo.sanitizeRedisKey(llmeo.Index)
 }
 
 // EmbeddFile processes and embeds the content of a given file into the LLM system.
 //
 // Parameters:
 //   - ObjectId: A unique identifier for the embedding object.
-//   - Title: The title of the document being embedded. Also it will be used for the raw file redis key
+//   - Title: The Title of the document being embedded. Also it will be used for raw data for a better Context
+//   - Index: The Index of the document being embedded. Also it will be used for the raw file redis key
 //   - fileName: The path to the file to be embedded.
 //   - tc: Configuration for transcription, such as language settings.
 //
 // Returns:
 //   - LLMEmbeddingObject: The embedded object containing the processed content.
 //   - error: An error if any issues occur during processing.
-func (llm LLMContainer) EmbeddFile(Title, fileName string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
+func (llm LLMContainer) EmbeddFile(Index, Title, fileName string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
 
 	var result LLMEmbeddingObject
 	EmbeddingContents := make(map[string]LLMEmbeddingContent)
@@ -89,11 +93,12 @@ func (llm LLMContainer) EmbeddFile(Title, fileName string, tc TranscribeConfig, 
 	EmbeddingContents[tc.Language] = LLMEmbeddingContent{
 		Text:   fileContents,
 		Title:  Title,
+		Index:  Index,
 		Source: fileName,
 	}
 
 	// Embed the transcribed text into the LLM system
-	embeddedTextObjects, embedErr := llm.EmbeddText(Title, EmbeddingContents, options...)
+	embeddedTextObjects, embedErr := llm.EmbeddText(Index, EmbeddingContents, options...)
 	if embedErr != nil {
 		return result, embedErr
 	}
@@ -104,14 +109,14 @@ func (llm LLMContainer) EmbeddFile(Title, fileName string, tc TranscribeConfig, 
 //
 // Parameters:
 //   - ObjectId: A unique identifier for the embedding object.
-//   - Title: The title associated with the content being embedded.
+//   - Index: The Index associated with the content being embedded.
 //   - url: The web URL from which content will be transcribed and embedded.
 //   - tc: Configuration for transcription, including language and extraction options.
 //
 // Returns:
 //   - LLMEmbeddingObject: The embedded object containing the processed content.
 //   - error: An error if any issues occur during the transcription or embedding process.
-func (llm LLMContainer) EmbeddURL(Title, url string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
+func (llm LLMContainer) EmbeddURL(Index, url string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
 
 	var result LLMEmbeddingObject
 	EmbeddingContents := make(map[string]LLMEmbeddingContent)
@@ -124,14 +129,14 @@ func (llm LLMContainer) EmbeddURL(Title, url string, tc TranscribeConfig, option
 	// Store transcribed content with the specified language as key
 	EmbeddingContents[tc.Language] = LLMEmbeddingContent{
 		Text:   fileContents,
-		Title:  Title,
+		Index:  Index,
 		Source: url,
 	}
 
 	// Embed the transcribed text into the LLM system
 	// o := LLMCallOptions{}
 	// for _, opt := range options {opt(&o)}
-	embeddedTextObjects, embedErr := llm.EmbeddText(Title, EmbeddingContents, options...)
+	embeddedTextObjects, embedErr := llm.EmbeddText(Index, EmbeddingContents, options...)
 	if embedErr != nil {
 		return result, embedErr
 	}
@@ -144,13 +149,13 @@ func (llm LLMContainer) EmbeddURL(Title, url string, tc TranscribeConfig, option
 //
 // Parameters:
 //   - ObjectId: Unique identifier for the embedding object.
-//   - Title: Title associated with the content being embedded.
+//   - Index: Index associated with the content being embedded.
 //   - Contents: A map containing language-specific content to be embedded.
 //
 // Returns:
 //   - LLMEmbeddingObject: The resulting embedding object after processing and storage.
 //   - error: An error if any issues occur during embedding or Redis operations.
-func (llm *LLMContainer) EmbeddText(Title string, Contents map[string]LLMEmbeddingContent, options ...LLMCallOption) (LLMEmbeddingObject, error) {
+func (llm *LLMContainer) EmbeddText(Index string, Contents map[string]LLMEmbeddingContent, options ...LLMCallOption) (LLMEmbeddingObject, error) {
 
 	o := LLMCallOptions{}
 	for _, opt := range options {
@@ -159,7 +164,7 @@ func (llm *LLMContainer) EmbeddText(Title string, Contents map[string]LLMEmbeddi
 
 	result := LLMEmbeddingObject{
 		EmbeddingPrefix: o.getEmbeddingPrefix(),
-		Title:    Title,
+		Index:           Index,
 	}
 
 	// Load existing data from Redis if available
@@ -171,6 +176,10 @@ func (llm *LLMContainer) EmbeddText(Title string, Contents map[string]LLMEmbeddi
 			llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
 
 		}
+		for _, key := range EmbeddingContents.GeneralKeys {
+			llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+
+		}
 	}
 
 	// Store new contents
@@ -178,15 +187,19 @@ func (llm *LLMContainer) EmbeddText(Title string, Contents map[string]LLMEmbeddi
 
 	// Process embedding for each language in contents
 	for language, content := range Contents {
-		tempKeys, _, err := llm.embedText(o.getEmbeddingPrefix()+":"+language+":", llm.Transcriber.cleanupText(content.Text), content.Title, content.Source)
+		tempKeys,generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix()+":"+language+":",language, content.Title, llm.Transcriber.cleanupText(content.Text), content.Source)
 		if err != nil {
 			return result, err
 		}
+ 
+
 		result.Contents[language] = LLMEmbeddingContent{
-			Text:   content.Text,
-			Source: content.Source,
-			Title:  content.Title,
-			Keys:   tempKeys,
+			Text:        content.Text,
+			Source:      content.Source,
+			Title:       content.Title,
+			Index:       content.Index,
+			Keys:        tempKeys,
+			GeneralKeys: generalKeys,
 		}
 	}
 
@@ -343,15 +356,15 @@ func (llm *LLMContainer) saveEmbeddingDataToRedis(obj LLMEmbeddingObject) error 
 	return obj.Save(llm.RedisClient.redisClient, obj.getRawDocRedisId())
 }
 
-// RemoveEmbeddingDataFromRedis deletes an embedding object and its associated keys from Redis.
+// RemoveEmbedding deletes an embedding object and its associated keys from Redis.
 //
 // Parameters:
 //   - ObjectId: The unique identifier for the embedding object to be removed.
-//   - Title: The title of the embedding object.
+//   - Index: The Index of the embedding object.
 //
 // Returns:
 //   - error: An error if deletion fails.
-func (llm *LLMContainer) RemoveEmbeddingDataFromRedis(Title string, options ...LLMCallOption) error {
+func (llm *LLMContainer) RemoveEmbedding(Index string, options ...LLMCallOption) error {
 
 	o := LLMCallOptions{}
 	for _, opt := range options {
@@ -359,7 +372,7 @@ func (llm *LLMContainer) RemoveEmbeddingDataFromRedis(Title string, options ...L
 	}
 	llmo := LLMEmbeddingObject{
 		EmbeddingPrefix: o.getEmbeddingPrefix(),
-		Title:    Title,
+		Index:           Index,
 	}
 	// Load the embedding object from Redis
 	llmo.Load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
@@ -367,6 +380,12 @@ func (llm *LLMContainer) RemoveEmbeddingDataFromRedis(Title string, options ...L
 	// Delete all associated keys stored in Redis
 	for _, content := range llmo.Contents {
 		for _, key := range content.Keys {
+			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+			if err != nil {
+				return err
+			}
+		}
+		for _, key := range content.GeneralKeys {
 			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
 			if err != nil {
 				return err

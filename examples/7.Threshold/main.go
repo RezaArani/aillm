@@ -68,11 +68,11 @@ func main() {
 	// The quality of the embedding model used in cosine similarity search significantly impacts the results. Choosing a high-quality model that generates embeddings suited to your domain (e.g., general-purpose models like Sentence Transformers for diverse text or domain-specific embeddings for specialized tasks) can improve the accuracy of similarity matching. A good embedding model will better capture semantic meaning, allowing you to set more reliable thresholds and retrieve more relevant and concise results.
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis( "SemMapas")
+	llm.RemoveEmbedding( "SemMapas")
 
-	llm.RemoveEmbeddingDataFromRedis("JohnDoe")
-	llm.RemoveEmbeddingDataFromRedis("ParisHistory")
-	llm.RemoveEmbeddingDataFromRedis("CropPestInfection")
+	llm.RemoveEmbedding("JohnDoe")
+	llm.RemoveEmbedding("ParisHistory")
+	llm.RemoveEmbedding("CropPestInfection")
  
 
 }

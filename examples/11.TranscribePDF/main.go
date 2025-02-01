@@ -49,7 +49,7 @@ func main() {
 	// let's embed a PDF,Word, Excel, Powerpoint or... file
 
 	llm.Transcriber.TikaURL = "http://localhost:9998"
-	_, err := llm.EmbeddFile( "SampleFile", llm.Transcriber.TempFolder+"/example.pdf", aillm.TranscribeConfig{
+	_, err := llm.EmbeddFile( "SampleIndex","Sample Title", llm.Transcriber.TempFolder+"/example.pdf", aillm.TranscribeConfig{
 		Language:            "en",
 		TikaLanguage:        "eng",
 		ExtractInlineImages: true,
@@ -64,8 +64,8 @@ func main() {
 	askKLLM(llm,  "Sum of the costs?")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis("SampleFile")
-	llm.RemoveEmbeddingDataFromRedis("")
+	llm.RemoveEmbedding("SampleIndex")
+	llm.RemoveEmbedding("")
 
 }
 

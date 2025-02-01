@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	aillm "github.com/RezaArani/aillm/controller"
-	"github.com/tmc/langchaingo/schema"
 )
 
 func main() {
@@ -15,66 +15,73 @@ func main() {
 	log.Println(time.Now())
 	// locally hosted ollama
 
-
-	llmclient := &aillm.OllamaController{
+	embeddingllmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
-			AiModel: "llama3.1",
+			AiModel: "all-minilm",
+		},
+	}
+
+	llmclient := &aillm.OpenAIController{
+		Config: aillm.LLMConfig{
+			Apiurl:   "https://llama-3-1-70b-instruct.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
+			AiModel:  "Meta-Llama-3_1-70B-Instruct",
+			APIToken: os.Getenv("APITOKEN"),
 		},
 	}
 
 	// Create an LLM instance with OllamaClient
 	llm := aillm.LLMContainer{
-		Embedder:  llmclient,
+		Embedder:  embeddingllmclient,
 		LLMClient: llmclient,
 		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
+
 	llm.Init()
 	embeddingIndex := "rawText"
 
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingIndex)
+	embedd(llm, embeddingIndex, "A",enRawText)
+	embedd(llm, embeddingIndex, "B","Reza Arani is a golang programmer")
+
+	askKLLMWithPrefix(llm,"A", "What is SemMapas?")
+	askKLLMWithPrefix(llm,"B", "What is SemMapas?")
+	askKLLMWithPrefix(llm,"A", "Who is Reza?")
+	askKLLMWithPrefix(llm,"B", "Who is Reza?")
+
+	askLLMAll(llm, "What is SemMapas?")
+	askLLMAll(llm, "Who is Reza?")
+
+
+	llm.RemoveEmbedding(embeddingIndex, llm.WithEmbeddingPrefix("A"))
+	llm.RemoveEmbedding(embeddingIndex, llm.WithEmbeddingPrefix("B"))
+
 	
-	// Time for asking some questions
-	askKLLM(llm, "What is SemMapas?")
-	askKLLM(llm, "Where did it launched?")
-	// Now removing embedded data and asking the same question, result should be I'm unable to provide a specific location regarding the launch of SemMapas as I don't have sufficient information on this topic.
-	llm.RemoveEmbedding(embeddingIndex)
-	// Asking the same question again
-	askKLLM(llm, "What is SemMapas?")
 }
 
-func askKLLM(llm aillm.LLMContainer, query string) {
+func askKLLMWithPrefix(llm aillm.LLMContainer, prefix,query string) {
 	log.Println("LLM Reply to " + query + ":")
-	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
-	response := queryResult.Response
-	resDocs := queryResult.RagDocs
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
-	log.Println("PromptTokens: ", response.Choices[0].GenerationInfo["PromptTokens"])
-	log.Println("TotalTokens: ", response.Choices[0].GenerationInfo["TotalTokens"])
-	log.Println("Reference Documents: ", len(resDocs.([]schema.Document)))
-
-	for idx, doc := range resDocs.([]schema.Document) {
-		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
-		log.Println(srcDocs)
-	}
-
+	llm.AskLLM(query, llm.WithStreamingFunc(print),llm.WithEmbeddingPrefix(prefix))
+	
 }
- 
-func embedd(llm aillm.LLMContainer, indexName string) {
+
+func askLLMAll(llm aillm.LLMContainer, query string) {
+	log.Println("LLM Reply to " + query + ":")
+	llm.AskLLM(query, llm.WithStreamingFunc(print),llm.SearchAll("en"))
+}
+
+
+func embedd(llm aillm.LLMContainer, indexName, prefix, contents string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
-		Text: enRawText,
+	LLMEmbeddingContent := make(map[string]aillm.LLMEmbeddingContent)
+	LLMEmbeddingContent["en"] = aillm.LLMEmbeddingContent{
+		Text: contents,
 	}
 
-	llm.EmbeddText(indexName, contents)
+	llm.EmbeddText(indexName, LLMEmbeddingContent, llm.WithEmbeddingPrefix(prefix))
 
 }
 

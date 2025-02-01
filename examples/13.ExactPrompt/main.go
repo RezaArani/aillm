@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -25,10 +26,10 @@ func main() {
 
 	llmclient := &aillm.OpenAIController{
 		Config: aillm.LLMConfig{
-			Apiurl:  "https://mixtral-8x22b-instruct-v01.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
-			AiModel: "Mixtral-8x22B-Instruct-v0.1",
-			// Apiurl:  "https://llama-3-70b-instruct.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
-			// AiModel: "Meta-Llama-3-70B-Instruct",
+			// Apiurl:  "https://mixtral-8x22b-instruct-v01.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
+			// AiModel: "Mixtral-8x22B-Instruct-v0.1",
+			Apiurl:  "https://llama-3-70b-instruct.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
+			AiModel: "Meta-Llama-3-70B-Instruct",
 			APIToken: os.Getenv("APITOKEN"),
 		},
 	}
@@ -77,7 +78,7 @@ func interpretQuery(resp *llms.ContentResponse) {
 
 func askKLLM(llm aillm.LLMContainer, query string) *llms.ContentResponse {
 	log.Println("LLM Reply to " + ":")
-	queryResult, err := llm.AskLLM("", llm.WithExactPromot(query))
+	queryResult, err := llm.AskLLM("", llm.WithExactPrompt(query), llm.WithStreamingFunc(print))
 	response := queryResult.Response
 	if err != nil {
 		panic(err)
@@ -86,4 +87,9 @@ func askKLLM(llm aillm.LLMContainer, query string) *llms.ContentResponse {
 	log.Println("PromptTokens: ", response.Choices[0].GenerationInfo["PromptTokens"])
 	log.Println("TotalTokens: ", response.Choices[0].GenerationInfo["TotalTokens"])
 	return response
+}
+
+func print(ctx context.Context, chunk []byte) error {
+	fmt.Print(string(chunk))
+	return nil
 }

@@ -31,19 +31,19 @@ func main() {
 	}
 
 	llm.Init()
-	embeddingTitle := "rawText"
+	embeddingIndex := "rawText"
 	// let's embed some data
-	embedd(llm, embeddingTitle, StartData)
+	embedd(llm, embeddingIndex, StartData)
 	// Response to the next question June 2024
 	askKLLM(llm, "User1", "SemMapas launch date?")
 
 	// Updating same embedding data
-	embedd(llm, embeddingTitle, UpdatedData)
+	embedd(llm, embeddingIndex, UpdatedData)
 	// April 2023, after updating previous data
 	askKLLM(llm, "User1", "SemMapas launch date?")
 
 	// Cleanup
-	llm.RemoveEmbeddingDataFromRedis(embeddingTitle)
+	llm.RemoveEmbedding(embeddingIndex)
 
 	// No data after removing embedded data so : I couldn't find any specific information or details regarding the launch date of SemMapas.
 	askKLLM(llm, "User1", "SemMapas launch date?")
@@ -70,13 +70,13 @@ func askKLLM(llm aillm.LLMContainer, user, query string) {
 
 }
 
-func embedd(llm aillm.LLMContainer, Title, content string) {
+func embedd(llm aillm.LLMContainer, Index, content string) {
 	// Text Embedding
 	contents := make(map[string]aillm.LLMEmbeddingContent)
 	contents["en"] = aillm.LLMEmbeddingContent{
 		Text: content,
 	}
-	llm.EmbeddText(Title, contents)
+	llm.EmbeddText(Index, contents)
 
 }
 
