@@ -37,7 +37,7 @@ type LLMEmbeddingContent struct {
 	Text        string `json:"Text" redis:"Text"`
 	Title       string `json:"Title" redis:"Title"`
 	Language    string `json:"Language" redis:"Language"`
-	Id       string `json:"Id" redis:"Id"`
+	Id          string `json:"Id" redis:"Id"`
 	Source      string `json:"Source" redis:"Source"`
 	Keys        []string
 	GeneralKeys []string
@@ -92,7 +92,7 @@ func (llm LLMContainer) EmbeddFile(Index, Title, fileName string, tc TranscribeC
 	}
 
 	// Store transcribed content with language as key
-	EmbeddingContents:= LLMEmbeddingContent{
+	EmbeddingContents := LLMEmbeddingContent{
 		Text:   fileContents,
 		Title:  Title,
 		Source: fileName,
@@ -120,14 +120,14 @@ func (llm LLMContainer) EmbeddFile(Index, Title, fileName string, tc TranscribeC
 func (llm LLMContainer) EmbeddURL(Index, url string, tc TranscribeConfig, options ...LLMCallOption) (LLMEmbeddingObject, error) {
 
 	var result LLMEmbeddingObject
- 	// Transcribe the content from the provided URL
+	// Transcribe the content from the provided URL
 	fileContents, _, transcribeErr := llm.Transcriber.transcribeURL(url, tc)
 	if transcribeErr != nil {
 		return result, transcribeErr
 	}
 
 	// Store transcribed content with the specified language as key
-	EmbeddingContents:= LLMEmbeddingContent{
+	EmbeddingContents := LLMEmbeddingContent{
 		Text:   fileContents,
 		Source: url,
 	}
@@ -169,26 +169,11 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	// Load existing data from Redis if available
 	result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
 
-	// // Delete existing Redis keys associated with the content
-	// for _, EmbeddingContents := range result.Contents {
-	// 	for _, key := range EmbeddingContents.Keys {
-	// 		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
-
-	// 	}
-	// 	for _, key := range EmbeddingContents.GeneralKeys {
-	// 		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
-
-	// 	}
-	// }
-
-	// Store new contents
-	// result.Contents = append(result.Contents, Contents)
-
 	// Process embedding for each language in contents
-	if result.Contents==nil{
+	if result.Contents == nil {
 		result.Contents = make(map[string]LLMEmbeddingContent)
 	}
-	if Contents.Id ==""{
+	if Contents.Id == "" {
 		Contents.Id = uuid.New().String()
 	}
 	//
@@ -196,7 +181,7 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	if err != nil {
 		return result, err
 	}
-	curContents:= result.Contents[Contents.Id]
+	curContents := result.Contents[Contents.Id]
 	// Cleanup previous keys
 	for _, key := range curContents.Keys {
 		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
@@ -204,17 +189,16 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	for _, key := range curContents.GeneralKeys {
 		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
 	}
-	
+
 	// updating with new keys
-	tmpGeneralKeys := append(curContents.GeneralKeys,  generalKeys...)
-	tmpKeys := append(curContents.GeneralKeys,  tempKeys...)
+	tmpGeneralKeys := append(curContents.GeneralKeys, generalKeys...)
+	tmpKeys := append(curContents.GeneralKeys, tempKeys...)
 
 	curContents = Contents
 	curContents.GeneralKeys = tmpGeneralKeys
 	curContents.Keys = tmpKeys
-	
-	result.Contents[Contents.Id]= curContents
- 
+
+	result.Contents[Contents.Id] = curContents
 
 	// Save the embedding data to Redis
 	redisErr := llm.saveEmbeddingDataToRedis(result)
@@ -261,7 +245,7 @@ func (llmEO *LLMEmbeddingObject) load(client *redis.Client, KeyID string) error 
 //
 // Returns:
 //   - error: An error if the key cannot be deleted or Redis connection fails.
-func (llmEO LLMEmbeddingObject) Delete(rdb *redis.Client, KeyID string) error {
+func (llmEO LLMEmbeddingObject) delete(rdb *redis.Client, KeyID string) error {
 	ctx := context.Background()
 	// Check Redis connection
 	_, err := rdb.Ping(ctx).Result()
@@ -284,11 +268,11 @@ func (llmEO LLMEmbeddingObject) Delete(rdb *redis.Client, KeyID string) error {
 //
 // Returns:
 //   - error: An error if the save operation fails.
-func (llmEO *LLMEmbeddingObject) Save(rdb *redis.Client, KeyID string) error {
+func (llmEO *LLMEmbeddingObject) save(rdb *redis.Client, KeyID string) error {
 	ctx := context.TODO()
 
 	// Delete any existing record before saving a new one
-	llmEO.Delete(rdb, llmEO.getRawDocRedisId())
+	llmEO.delete(rdb, llmEO.getRawDocRedisId())
 	// Serialize the embedding object to JSON format
 	data, err := json.Marshal(llmEO)
 	if err != nil {
@@ -373,7 +357,7 @@ func (llmEO LLMEmbeddingObject) List(rdb *redis.Client, KeyID string, offset, li
 //   - error: An error if the save operation fails.
 func (llm *LLMContainer) saveEmbeddingDataToRedis(obj LLMEmbeddingObject) error {
 	// Store the embedding object in Redis using its generated key
-	return obj.Save(llm.RedisClient.redisClient, obj.getRawDocRedisId())
+	return obj.save(llm.RedisClient.redisClient, obj.getRawDocRedisId())
 }
 
 // RemoveEmbedding deletes an embedding object and its associated keys from Redis.
@@ -414,5 +398,42 @@ func (llm *LLMContainer) RemoveEmbedding(Index string, options ...LLMCallOption)
 	}
 
 	// Remove the embedding object from Redis
-	return llmo.Delete(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	return llmo.delete(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+}
+
+func (llm *LLMContainer) RemoveEmbeddingSubKey(Index, rawDocID string, options ...LLMCallOption) error {
+
+	o := LLMCallOptions{}
+	for _, opt := range options {
+		opt(&o)
+	}
+	llmo := LLMEmbeddingObject{
+		EmbeddingPrefix: o.getEmbeddingPrefix(),
+		Index:           Index,
+	}
+	// Load the embedding object from Redis
+	llmo.load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	keyToDelete := llmo.Contents[rawDocID]
+	// Delete all associated keys stored in Redis
+
+	for _, key := range keyToDelete.Keys {
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+		if err != nil {
+			return err
+		}
+	}
+	for _, key := range keyToDelete.GeneralKeys {
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+		if err != nil {
+			return err
+		}
+	}
+	delete(llmo.Contents, rawDocID)
+	if len(llmo.Contents) == 0 {
+		//deleting the key if it was empty
+		return llmo.delete(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	} else {
+		// saving the embedding object to Redis
+		return llmo.save(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	}
 }

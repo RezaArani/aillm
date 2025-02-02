@@ -269,7 +269,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
 		languageCapabilityDetectionText := `detected language without mentioning it.`
 		if llm.LLMModelLanguageDetectionCapability {
-			languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response `
+			languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
 			languageCapabilityDetectionText = "{language}"
 
 		} else {
