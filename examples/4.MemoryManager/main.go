@@ -12,8 +12,6 @@ import (
 func main() {
 	log.Println("Start:")
 
-	
-
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
@@ -51,7 +49,6 @@ func main() {
 
 	// Cleanup
 	llm.RemoveEmbedding("SemMapas")
-	llm.RemoveEmbedding("JohnDoe")
 
 }
 
@@ -77,18 +74,19 @@ func askKLLM(llm aillm.LLMContainer, user, query string) {
 
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	
+	contents:= aillm.LLMEmbeddingContent{
 		Text: SemMapas,
+		Language: "en",
 	}
-
 	llm.EmbeddText("SemMapas", contents)
-	contents = make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
-		Text: JohnDoe,
-	}
-	llm.EmbeddText("JohnDoe", contents)
 
+	contents = aillm.LLMEmbeddingContent{
+		Text: JohnDoe,
+		Language: "en",
+	}
+	llm.EmbeddText("SemMapas", contents)
+ 
 }
 
 func print(ctx context.Context, chunk []byte) error {

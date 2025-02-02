@@ -147,6 +147,9 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	for _, opt := range options {
 		opt(&o)
 	}
+	if o.Prefix == "" {
+		o.searchAll = true
+	}
 	result.addAction("Start Calling LLM", o.ActionCallFunc)
 
 	mem, exists := llm.MemoryManager.GetMemory(o.SessionID)
@@ -187,20 +190,17 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, llm.Character))
 		}
 		// Construct the query prefix for the embedding store
-		KNNPrefix := o.getEmbeddingPrefix() + ":"
+		KNNPrefix := "context:" + o.getEmbeddingPrefix() + ":"
 		if o.searchAll {
 			// o.Prefix =
-			KNNPrefix = "all:" + o.searchAllLanguage + ":"
+			KNNPrefix = "all:" + o.getEmbeddingPrefix() + ":" + o.searchAllLanguage + ":"
 		} else {
 			if o.Language == "" {
 				if llm.FallbackLanguage != "" {
 					o.Language = llm.FallbackLanguage
-				} else {
-					// return result, errors.New("missing language. you can use fallback language if you want to use backup contents")
-					o.Language = "en"
 				}
 			}
-			KNNPrefix += o.Language + ":"
+			KNNPrefix += o.Index + ":" + o.Language + ":"
 		}
 		KNNQuery := Query
 
@@ -235,10 +235,10 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0 && o.ExtraContext == ""
 
 		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
-			searchPrefix := o.getEmbeddingPrefix()+":"+llm.FallbackLanguage+":"
+			searchPrefix := o.getEmbeddingPrefix() + ":" + llm.FallbackLanguage + ":"
 			if o.searchAll {
 				// o.Prefix =
-				searchPrefix = "all:" + llm.FallbackLanguage + ":"
+				searchPrefix = "all:" + o.Prefix + ":" + llm.FallbackLanguage + ":"
 			}
 			switch llm.SearchAlgorithm {
 			case SimilaritySearch:
@@ -447,6 +447,15 @@ func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 		o.Prefix = Prefix
 	}
 }
+
+func (llm *LLMContainer) WithEmbeddingIndex(Index string) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		if Index == "" {
+			Index = "default"
+		}
+		o.Index = Index
+	}
+}
 func (llm *LLMContainer) SearchAll(language string) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		// o.Prefix = "all:"+language
@@ -485,5 +494,5 @@ func (o *LLMCallOptions) getEmbeddingPrefix() string {
 	if o.Prefix == "" {
 		o.Prefix = "default"
 	}
-	return "context:" + o.Prefix
+	return o.Prefix
 }

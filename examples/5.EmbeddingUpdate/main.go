@@ -11,7 +11,6 @@ import (
 
 func main() {
 	log.Println("Start:")
-	
 
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
@@ -29,30 +28,30 @@ func main() {
 			Host: "localhost:6379",
 		},
 	}
-
+ 
 	llm.Init()
 	embeddingIndex := "rawText"
 	// let's embed some data
 	embedd(llm, embeddingIndex, StartData)
 	// Response to the next question June 2024
-	askKLLM(llm, "User1", "SemMapas launch date?")
+	askKLLM(llm, embeddingIndex,"SemMapas launch date?")
 
 	// Updating same embedding data
 	embedd(llm, embeddingIndex, UpdatedData)
 	// April 2023, after updating previous data
-	askKLLM(llm, "User1", "SemMapas launch date?")
+	askKLLM(llm, embeddingIndex,"SemMapas launch date?")
 
 	// Cleanup
 	llm.RemoveEmbedding(embeddingIndex)
 
 	// No data after removing embedded data so : I couldn't find any specific information or details regarding the launch date of SemMapas.
-	askKLLM(llm, "User1", "SemMapas launch date?")
+	askKLLM(llm,embeddingIndex, "SemMapas launch date?")
 
 }
 
-func askKLLM(llm aillm.LLMContainer, user, query string) {
-	log.Println("LLM Reply to " + query + " from " + user + ":")
-	queryResult, err := llm.AskLLM(query, llm.WithSessionID(user), llm.WithStreamingFunc(print))
+func askKLLM(llm aillm.LLMContainer,embeddingIndex, query string) {
+	log.Println("LLM Reply to " + query + ":")
+	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
 	response := queryResult.Response
 	resDocs := queryResult.RagDocs
 	if err != nil {
@@ -72,12 +71,11 @@ func askKLLM(llm aillm.LLMContainer, user, query string) {
 
 func embedd(llm aillm.LLMContainer, Index, content string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	emb := aillm.LLMEmbeddingContent{
 		Text: content,
+		Id:"TestID",
 	}
-	llm.EmbeddText(Index, contents)
-
+	llm.EmbeddText(Index, emb)
 }
 
 func print(ctx context.Context, chunk []byte) error {

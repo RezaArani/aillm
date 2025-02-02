@@ -47,13 +47,12 @@ func main() {
 	tc := aillm.TranscribeConfig{
 		Language: "en",
 	}
-	llm.EmbeddURL("SemMapas", "https://semmapas.com", tc)
+	llm.EmbeddURL("", "https://semmapas.com", tc)
 	// before
 	askKLLM(llm, "What is SemMapas?")
-	// looks for the data in "pt" language contents but replies in English
 
 	// Cleanup
-	llm.RemoveEmbedding("SemMapas")
+	llm.RemoveEmbedding("")
 
 }
 
@@ -77,16 +76,13 @@ func askKLLM(llm aillm.LLMContainer, query string) {
 
 }
 
-func removeEmbedd(llm aillm.LLMContainer, embeddingId, Index string) {
-}
 
 func embedd(llm aillm.LLMContainer, Content string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents:= aillm.LLMEmbeddingContent{
 		Text: Content,
 	}
-	llm.EmbeddText("SemMapas", contents)
+	llm.EmbeddText("", contents)
 }
 func print(ctx context.Context, chunk []byte) error {
 	fmt.Print(string(chunk))

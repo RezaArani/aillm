@@ -44,14 +44,14 @@ func main() {
 	askKLLM(llm, "What is SemMapas?")
 	// Now let's remove the embedding and the result should be something like I couldn't find any relevant information or a clear answer regarding your question about SemMapas.
 	log.Println("Removing Embedding:")
-	llm.RemoveEmbedding("SemMapas")
+	llm.RemoveEmbedding("")
 	askKLLM(llm, "What is SemMapas?")
 	// Now let's rely on model data and hallucination and the result should be something like "SemMapas is a Brazilian navigation app that provides turn-by-turn directions and real-time traffic information." which is not correct.
 	llm.AllowHallucinate = true
 	askKLLM(llm, "What is SemMapas?")
 
 	// Cleanup
-	llm.RemoveEmbedding("SemMapas")
+	llm.RemoveEmbedding("")
 
 }
 
@@ -77,11 +77,10 @@ func askKLLM(llm aillm.LLMContainer, query string) {
 
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+ 	contents:= aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
-	llm.EmbeddText("SemMapas", contents)
+	llm.EmbeddText("", contents)
 }
 
 func print(ctx context.Context, chunk []byte) error {

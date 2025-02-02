@@ -11,23 +11,23 @@ import (
 
 func main() {
 	log.Println("Start:")
- 
+
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
 			AiModel: "llama3.1",
 		},
 	}
+ 
 
 	// Create an LLM instance with OllamaClient
 	llm := aillm.LLMContainer{
-		Embedder:       llmclient,
-		LLMClient:      llmclient,
-		ScoreThreshold: 0.8,
+		LLMClient: llmclient,
 		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
 	}
+	
 
 	llm.Init()
 	embeddingIndex := "rawText"
@@ -36,24 +36,24 @@ func main() {
 	log.Println("Embedding:")
 	embedd(llm, embeddingIndex)
 	// looks for the data in "en" language contents
-	askKLLM(llm, "en", "What is SemMapas?")
+	askKLLM(llm, embeddingIndex, "en", "What is SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
-	askKLLM(llm, "pt", "What is SemMapas?")
+	askKLLM(llm, embeddingIndex, "pt", "What is SemMapas?")
 	// looks for the data in "en" language contents, so based on enRawText sample, result should be Portugal
-	askKLLM(llm, "en", "Where did it launched?")
+	askKLLM(llm, embeddingIndex, "en", "Where did it launched?")
 	// looks for the data in "pt" language contents, so based on sample, result should be Lourinhã
-	askKLLM(llm, "pt", "Where did it launched?")
+	askKLLM(llm, embeddingIndex, "pt", "Where did it launched?")
 	// looks for the data in "pt" language contents, so based on ptRawText sample, result should be April 2023
-	askKLLM(llm, "pt", "When did it launched?")
+	askKLLM(llm, embeddingIndex, "pt", "When did it launched?")
 	// looks for the data in "pt" language contents, so based on ptRawText sample, result should be just 2023
-	askKLLM(llm, "en", "When did it launched?")
+	askKLLM(llm, embeddingIndex, "en", "When did it launched?")
 	// Now removing embedded data and asking the same question, result should be I'm unable to provide a specific location regarding the launch of SemMapas as I don't have sufficient information on this topic.
 	llm.RemoveEmbedding(embeddingIndex)
-	askKLLM(llm, "pt", "Where did it launched?")
+	askKLLM(llm,embeddingIndex, "pt", "Where did it launched?")
 
 }
 
-func askKLLM(llm aillm.LLMContainer, Language, query string) {
+func askKLLM(llm aillm.LLMContainer, index, Language, query string) {
 	log.Println("LLM Reply to " + query + ":")
 	queryResult, err := llm.AskLLM(query, llm.WithLanguage(Language), llm.WithStreamingFunc(print))
 	response := queryResult.Response
@@ -72,17 +72,23 @@ func askKLLM(llm aillm.LLMContainer, Language, query string) {
 	}
 
 }
- 
+
 func embedd(llm aillm.LLMContainer, Index string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	
+	contents:= aillm.LLMEmbeddingContent{
 		Text: enRawText,
-	}
-	contents["pt"] = aillm.LLMEmbeddingContent{
-		Text: ptRawText,
+		Language: "en",
 	}
 	llm.EmbeddText(Index, contents)
+
+
+	contentsPt:= aillm.LLMEmbeddingContent{
+		Text: ptRawText,
+		Language: "pt",
+	}
+	 
+	llm.EmbeddText(Index, contentsPt)
 
 }
 

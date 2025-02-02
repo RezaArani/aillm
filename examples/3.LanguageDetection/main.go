@@ -12,7 +12,6 @@ import (
 func main() {
 	log.Println("Start:")
 
-	
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
@@ -30,26 +29,28 @@ func main() {
 		},
 	}
 
+
 	llm.Init()
 	embeddingIndex := "rawText"
 	// let's embed some data
 	log.Println("Embedding:")
 	embedd(llm, embeddingIndex)
 	// looks for the data in "en" language contents
-	askKLLM(llm, "en", "What is SemMapas?")
+	askKLLM(llm, embeddingIndex, "en", "What is SemMapas?")
 	// looks for the data in "pt" language contents but replies in English
-	askKLLM(llm, "pt", "What is SemMapas?")
+	askKLLM(llm, embeddingIndex, "pt", "What is SemMapas?")
 	llm.LLMModelLanguageDetectionCapability = true
 	// looks for  for the data in "en" language contents but replies in Persian because prompt was in Persian language.
 	// please remember this feature depends on model capabilites and is not usable on small models
-	askKLLM(llm, "en", "چیه؟ SemMapas?")
+	askKLLM(llm, embeddingIndex, "en", "چیه؟ SemMapas?")
 
 	// Cleanup
 	llm.RemoveEmbedding(embeddingIndex)
 
+
 }
 
-func askKLLM(llm aillm.LLMContainer, Language, query string) {
+func askKLLM(llm aillm.LLMContainer, index, Language, query string) {
 	log.Println("LLM Reply to " + query + ":")
 	queryResult, err := llm.AskLLM(query, llm.WithLanguage(Language), llm.WithStreamingFunc(print))
 	response := queryResult.Response
@@ -71,12 +72,17 @@ func askKLLM(llm aillm.LLMContainer, Language, query string) {
 
 func embedd(llm aillm.LLMContainer, Index string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	
+	contents:= aillm.LLMEmbeddingContent{
 		Text: enRawText,
+		Language: "en",
 	}
-	contents["pt"] = aillm.LLMEmbeddingContent{
+	llm.EmbeddText(Index, contents)
+
+	contents = aillm.LLMEmbeddingContent{
 		Text: ptRawText,
+		Language: "pt",
+
 	}
 	llm.EmbeddText(Index, contents)
 

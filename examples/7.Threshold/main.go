@@ -51,9 +51,11 @@ func main() {
 	// It is essential to balance the score to optimize the trade-off between information richness and processing efficiency.
 
 	llm.ScoreThreshold = 0.9
+	// there are multiple nonrelated documents will be retrieved. It means our prompt will be bigger and less efficient
 	askKLLM(llm,  "SemMapas city?")
 	// Now let's make it more accurate
 	llm.ScoreThreshold = 0.5
+	// It just returns one row for the context
 	askKLLM(llm, "SemMapas city?")
 
 	// ask about another subject
@@ -68,13 +70,7 @@ func main() {
 	// The quality of the embedding model used in cosine similarity search significantly impacts the results. Choosing a high-quality model that generates embeddings suited to your domain (e.g., general-purpose models like Sentence Transformers for diverse text or domain-specific embeddings for specialized tasks) can improve the accuracy of similarity matching. A good embedding model will better capture semantic meaning, allowing you to set more reliable thresholds and retrieve more relevant and concise results.
 
 	// Cleanup
-	llm.RemoveEmbedding( "SemMapas")
-
-	llm.RemoveEmbedding("JohnDoe")
-	llm.RemoveEmbedding("ParisHistory")
-	llm.RemoveEmbedding("CropPestInfection")
- 
-
+	llm.RemoveEmbedding("")
 }
 
 func askKLLM(llm aillm.LLMContainer, query string) {
@@ -99,30 +95,27 @@ func askKLLM(llm aillm.LLMContainer, query string) {
  
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents := aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
 
-	llm.EmbeddText( "SemMapas", contents)
+	llm.EmbeddText( "", contents)
 
-	contents = make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents = aillm.LLMEmbeddingContent{
 		Text: JohnDoe,
 	}
-	llm.EmbeddText(  "JohnDoe", contents)
+	llm.EmbeddText(  "", contents)
 
-	contents = make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	
+	contents = aillm.LLMEmbeddingContent{
 		Text: ParisHistory,
 	}
-	llm.EmbeddText("ParisHistory", contents)
+	llm.EmbeddText("", contents)
 
-	contents = make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents = aillm.LLMEmbeddingContent{
 		Text: CropPestInfection,
 	}
-	llm.EmbeddText( "CropPestInfection", contents)
+	llm.EmbeddText( "", contents)
 
 }
 

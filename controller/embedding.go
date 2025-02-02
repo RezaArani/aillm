@@ -111,7 +111,7 @@ func (llm *LLMContainer) InitEmbedding() error {
 //   - []string: A slice of keys representing the stored embeddings in the vector database.
 //   - int: The number of chunks the text was split into.
 //   - error: An error if the embedding process fails.
-func (llm *LLMContainer) embedText(prefix,language, title, contents, source string) ([]string, []string, int, error) {
+func (llm *LLMContainer) embedText(prefix, language, index, title, contents, source string) ([]string, []string, int, error) {
 	var docList []string
 	var generalDocList []string
 	// Check if the embedding model is available
@@ -159,7 +159,7 @@ func (llm *LLMContainer) embedText(prefix,language, title, contents, source stri
 	}
 
 	// Setup Redis vector store with index name and embedding model
-	redisVector := redisvector.WithIndexName(prefix+"aillm_vector_idx", true)
+	redisVector := redisvector.WithIndexName("context:"+prefix+":"+index+":"+language+":aillm_vector_idx", true)
 	embedderVector := redisvector.WithEmbedder(embedder)
 
 	// Retrieve Redis host URL for connection
@@ -183,7 +183,7 @@ func (llm *LLMContainer) embedText(prefix,language, title, contents, source stri
 			return docList, generalDocList, 0, splitErr
 		}
 
-		generalRedisVector := redisvector.WithIndexName("all:"+language+":aillm_vector_idx", true)
+		generalRedisVector := redisvector.WithIndexName("all:"+prefix+":"+language+":aillm_vector_idx", true)
 		generalStore, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), generalRedisVector, embedderVector)
 		if err != nil {
 			return docList, generalDocList, 0, splitErr
@@ -193,7 +193,6 @@ func (llm *LLMContainer) embedText(prefix,language, title, contents, source stri
 		if err != nil {
 			return docList, generalDocList, 0, splitErr
 		}
-
 
 	}
 

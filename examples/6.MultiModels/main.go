@@ -75,11 +75,9 @@ func askKLLM(llm aillm.LLMContainer, query string) {
 
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents := aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
-
 	llm.EmbeddText("SemMapas", contents)
 }
 

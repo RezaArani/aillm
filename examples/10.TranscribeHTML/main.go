@@ -38,8 +38,6 @@ func main() {
 	}
 	llm.Init()
 
-	// Let's create an empty index:
-	embedd(llm, "Hi")
 	// asking  "What is SemMapas?" won't return any value
 	askKLLM(llm, "What is SemMapas?")
 
@@ -55,13 +53,12 @@ func main() {
 
 	// Cleanup
 	llm.RemoveEmbedding("SampleIndex")
-	llm.RemoveEmbedding("")
 
 }
 
 func askKLLM(llm aillm.LLMContainer,   query string) {
 	log.Println("LLM Reply to " + query  + ":")
-	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
+	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print),llm.WithEmbeddingIndex("SampleIndex"))
 	response := queryResult.Response
 	resDocs := queryResult.RagDocs
 
@@ -82,11 +79,10 @@ func askKLLM(llm aillm.LLMContainer,   query string) {
 
 func embedd(llm aillm.LLMContainer, Content string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents:= aillm.LLMEmbeddingContent{
 		Text: Content,
 	}
-	llm.EmbeddText("SampleFile", contents)
+	llm.EmbeddText("SampleIndex", contents)
 }
 func print(ctx context.Context, chunk []byte) error {
 	fmt.Print(string(chunk))

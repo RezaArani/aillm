@@ -22,7 +22,6 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
-	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.26 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
 	github.com/redis/rueidis v1.0.53 // indirect
@@ -36,6 +35,6 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	nhooyr.io/websocket v1.8.7 // indirect
+	nhooyr.io/websocket v1.8.17 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )

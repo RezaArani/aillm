@@ -41,22 +41,22 @@ func main() {
 	log.Println("Embedding:")
 	embedd(llm)
 	// First search will be in "Company category". Result should be something about SemMapas company.
-	askKLLM(llm, "Company", "SemMapas city?")
+	askKLLM(llm, "SemMapas", "SemMapas city?")
 	// Now let's search in Agriculture category and result should be something like I can't find ...
-	askKLLM(llm, "Agriculture", "SemMapas city?")
+	askKLLM(llm, "CropPestInfection", "SemMapas city?")
 
 	// Now let's search in Agriculture category about related subject.
-	askKLLM(llm, "Agriculture", "Tell me about crop infection.")
+	askKLLM(llm, "CropPestInfection", "Tell me about crop infection.")
 
 	// Cleanup
-	llm.RemoveEmbedding("CropPestInfection", llm.WithEmbeddingPrefix("Agriculture"))
-	llm.RemoveEmbedding("SemMapas", llm.WithEmbeddingPrefix("Company"))
+	llm.RemoveEmbedding("CropPestInfection")
+	llm.RemoveEmbedding("SemMapas")
 
 }
 
-func askKLLM(llm aillm.LLMContainer, category, query string) {
+func askKLLM(llm aillm.LLMContainer, index, query string) {
 	log.Println("LLM Reply to " + ":")
-	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print), llm.WithEmbeddingPrefix(category))
+	queryResult, err := llm.AskLLM(query,llm.WithEmbeddingIndex(index), llm.WithStreamingFunc(print))
 	response := queryResult.Response
 	resDocs := queryResult.RagDocs
 	if err != nil {
@@ -76,18 +76,16 @@ func askKLLM(llm aillm.LLMContainer, category, query string) {
 
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents:= aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
-	//llm.WithEmbeddingPrefix() will provide searching in a different category
-	llm.EmbeddText("SemMapas", contents, llm.WithEmbeddingPrefix("Company"))
+	//llm.WithEmbeddingPrefix() will provide categorizing in a bigger scale
+	llm.EmbeddText("SemMapas", contents)
 
-	contents = make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents = aillm.LLMEmbeddingContent{
 		Text: CropPestInfection,
 	}
-	llm.EmbeddText("CropPestInfection", contents, llm.WithEmbeddingPrefix("Agriculture"))
+	llm.EmbeddText("CropPestInfection", contents)
 
 }
 

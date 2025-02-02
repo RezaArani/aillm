@@ -41,8 +41,6 @@ func main() {
 	}
 	llm.Init()
 
-	// Let's create an empty index:
-	embedd(llm, "Hi")
 	// asking  "What is SemMapas?" won't return any value
 	askKLLM(llm, "What is SemMapas?")
 
@@ -65,7 +63,6 @@ func main() {
 
 	// Cleanup
 	llm.RemoveEmbedding("SampleIndex")
-	llm.RemoveEmbedding("")
 
 }
 
@@ -92,8 +89,7 @@ func askKLLM(llm aillm.LLMContainer,  query string) {
 
 func embedd(llm aillm.LLMContainer,  Content string) {
 	// Text Embedding
-	contents := make(map[string]aillm.LLMEmbeddingContent)
-	contents["en"] = aillm.LLMEmbeddingContent{
+	contents:= aillm.LLMEmbeddingContent{
 		Text: Content,
 	}
 	llm.EmbeddText( "SemMapas", contents)

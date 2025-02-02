@@ -73,6 +73,7 @@ type LLMCallOptions struct {
 	StreamingFunc func(ctx context.Context, chunk []byte) error `json:"-"`
 	ActionCallFunc func(action LLMAction) `json:"-"`
 	Prefix string
+	Index string
 	Language string
 	SessionID string
 	ExtraContext string

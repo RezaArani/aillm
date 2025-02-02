@@ -40,44 +40,43 @@ func main() {
 	}
 
 	llm.Init()
-	embeddingIndex := "rawText"
+	embeddingIndex := "semmapas_pt"
 
 	// let's embed some data
 	log.Println("Embedding:")
-	embedd(llm, embeddingIndex, "A",enRawText)
-	embedd(llm, embeddingIndex, "B","Reza Arani is a golang programmer")
+	embedd(llm, embeddingIndex, "LocA",enRawText)
+	embedd(llm, embeddingIndex, "LocB","Reza Arani is a golang programmer")
 
-	askKLLMWithPrefix(llm,"A", "What is SemMapas?")
-	askKLLMWithPrefix(llm,"B", "What is SemMapas?")
-	askKLLMWithPrefix(llm,"A", "Who is Reza?")
-	askKLLMWithPrefix(llm,"B", "Who is Reza?")
+	askKLLMWithPrefix(llm,embeddingIndex,"LocA", "What is SemMapas?")
+	askKLLMWithPrefix(llm,embeddingIndex,"LocB", "What is SemMapas?")
+	askKLLMWithPrefix(llm,embeddingIndex,"LocA", "Who is Reza?")
+	askKLLMWithPrefix(llm,embeddingIndex,"LocB", "Who is Reza?")
 
-	askLLMAll(llm, "What is SemMapas?")
-	askLLMAll(llm, "Who is Reza?")
+	askLLMAll(llm,embeddingIndex, "What is SemMapas?")
+	askLLMAll(llm,embeddingIndex, "Who is Reza?")
 
 
-	llm.RemoveEmbedding(embeddingIndex, llm.WithEmbeddingPrefix("A"))
-	llm.RemoveEmbedding(embeddingIndex, llm.WithEmbeddingPrefix("B"))
+	llm.RemoveEmbedding("LocA", llm.WithEmbeddingPrefix(embeddingIndex))
+	llm.RemoveEmbedding("LocB", llm.WithEmbeddingPrefix(embeddingIndex))
 
 	
 }
 
-func askKLLMWithPrefix(llm aillm.LLMContainer, prefix,query string) {
+func askKLLMWithPrefix(llm aillm.LLMContainer, prefix,index,query string) {
 	log.Println("LLM Reply to " + query + ":")
-	llm.AskLLM(query, llm.WithStreamingFunc(print),llm.WithEmbeddingPrefix(prefix))
+	llm.AskLLM(query, llm.WithStreamingFunc(print),llm.WithEmbeddingPrefix(prefix),llm.WithEmbeddingIndex(index))
 	
 }
 
-func askLLMAll(llm aillm.LLMContainer, query string) {
+func askLLMAll(llm aillm.LLMContainer,prefix, query string) {
 	log.Println("LLM Reply to " + query + ":")
-	llm.AskLLM(query, llm.WithStreamingFunc(print),llm.SearchAll("en"))
+	llm.AskLLM(query, llm.WithStreamingFunc(print),llm.WithEmbeddingPrefix(prefix),llm.SearchAll(""))
 }
 
 
-func embedd(llm aillm.LLMContainer, indexName, prefix, contents string) {
+func embedd(llm aillm.LLMContainer,  prefix,indexName, contents string) {
 	// Text Embedding
-	LLMEmbeddingContent := make(map[string]aillm.LLMEmbeddingContent)
-	LLMEmbeddingContent["en"] = aillm.LLMEmbeddingContent{
+	LLMEmbeddingContent := aillm.LLMEmbeddingContent{
 		Text: contents,
 	}
 
