@@ -26,10 +26,14 @@ import (
 //   - Questions: A slice of strings representing the list of user queries in the session.
 //   - MemoryStartTime: A timestamp indicating when the session started.
 type Memory struct {
-	Questions       []string  // Stores user queries during the session
+	Questions       []MemoryData  // Stores user queries during the session
 	MemoryStartTime time.Time // Timestamp when the session started
 }
 
+type MemoryData struct{
+	Question string
+	Answer string
+}
 // MemoryManager manages session memories with a time-to-live (TTL) mechanism.
 //
 // This struct is responsible for storing user sessions, providing thread-safe access
@@ -39,6 +43,7 @@ type Memory struct {
 //   - memoryMap: A map storing session ID as the key and Memory struct as the value.
 //   - mu: A mutex to ensure thread-safe operations on the memory map.
 //   - ttl: The time-to-live (TTL) duration after which sessions will be removed automatically.
+
 type MemoryManager struct {
 	memoryMap map[string]Memory // Stores session data with session ID as the key
 	mu        sync.Mutex        // Mutex to prevent concurrent access issues
@@ -72,7 +77,7 @@ func NewMemoryManager(ttlMinutes int) *MemoryManager {
 // Parameters:
 //   - sessionID: The unique identifier for the user's session.
 //   - questions: A slice of strings containing user queries.
-func (m *MemoryManager) AddMemory(sessionID string, questions []string) {
+func (m *MemoryManager) AddMemory(sessionID string, questions []MemoryData) {
 	m.mu.Lock() // Lock to ensure thread-safe operation
 	defer m.mu.Unlock()
 	m.memoryMap[sessionID] = Memory{

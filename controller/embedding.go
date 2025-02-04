@@ -111,7 +111,7 @@ func (llm *LLMContainer) InitEmbedding() error {
 //   - []string: A slice of keys representing the stored embeddings in the vector database.
 //   - int: The number of chunks the text was split into.
 //   - error: An error if the embedding process fails.
-func (llm *LLMContainer) embedText(prefix, language, index, title, contents, source string) ([]string, []string, int, error) {
+func (llm *LLMContainer) embedText(prefix, language, index, title, contents, source string, GeneralEmbeddingDenied bool) ([]string, []string, int, error) {
 	var docList []string
 	var generalDocList []string
 	// Check if the embedding model is available
@@ -182,16 +182,17 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents, sou
 		if err != nil {
 			return docList, generalDocList, 0, splitErr
 		}
+		if !GeneralEmbeddingDenied {
+			generalRedisVector := redisvector.WithIndexName("all:"+prefix+":"+language+":aillm_vector_idx", true)
+			generalStore, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), generalRedisVector, embedderVector)
+			if err != nil {
+				return docList, generalDocList, 0, splitErr
+			}
 
-		generalRedisVector := redisvector.WithIndexName("all:"+prefix+":"+language+":aillm_vector_idx", true)
-		generalStore, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), generalRedisVector, embedderVector)
-		if err != nil {
-			return docList, generalDocList, 0, splitErr
-		}
-
-		generalDocList, err = generalStore.AddDocuments(context.Background(), docs)
-		if err != nil {
-			return docList, generalDocList, 0, splitErr
+			generalDocList, err = generalStore.AddDocuments(context.Background(), docs)
+			if err != nil {
+				return docList, generalDocList, 0, splitErr
+			}
 		}
 
 	}

@@ -177,7 +177,7 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 		Contents.Id = uuid.New().String()
 	}
 	//
-	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text), Contents.Source)
+	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text), Contents.Source, o.LimitGeneralEmbedding)
 	if err != nil {
 		return result, err
 	}
@@ -306,7 +306,11 @@ func (llmEO *LLMEmbeddingObject) save(rdb *redis.Client, KeyID string) error {
 // Returns:
 //   - map[string]interface{}: A map containing retrieved objects and total count.
 //   - error: An error if the operation fails.
-func (llmEO LLMEmbeddingObject) List(rdb *redis.Client, KeyID string, offset, limit int) (map[string]interface{}, error) {
+func (llm *LLMContainer)ListEmbeddings(KeyID string, offset, limit int) (map[string]interface{}, error){
+	oe:= LLMEmbeddingObject{}
+	return oe.list(llm.RedisClient.redisClient, KeyID, offset, limit)
+}
+func (llmEO LLMEmbeddingObject) list(rdb *redis.Client, KeyID string, offset, limit int) (map[string]interface{}, error) {
 	ctx := context.Background()
 
 	// Check Redis connection
@@ -435,5 +439,6 @@ func (llm *LLMContainer) RemoveEmbeddingSubKey(Index, rawDocID string, options .
 	} else {
 		// saving the embedding object to Redis
 		return llmo.save(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+
 	}
 }

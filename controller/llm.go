@@ -207,7 +207,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		// Append past session queries to provide context
 
 		for _, memoryItem := range mem.Questions {
-			KNNQuery += "\n" + memoryItem
+			KNNQuery += "\n" + memoryItem.Question
 		}
 		// KNNQuery += Query
 
@@ -301,11 +301,16 @@ Assistant:`
 				ragText += doc.PageContent
 			}
 			ragText += "\n" + o.ExtraContext
+			// ragText = languageCapabilityDetectionFunction +
+			// 	`\nYou are an AI assistant with knowledge only and only just this text: "` + ragText + `". ` +
+			// 	`\nThink step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."` +
+			// 	`\nUser: "` + Query + `"` +
+			// 	`\nAssistant:`
 			ragText = languageCapabilityDetectionFunction +
-				`\nYou are an AI assistant with knowledge only and only just this text: "` + ragText + `". ` +
-				`\nThink step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."` +
-				`\nUser: "` + Query + `"` +
-				`\nAssistant:`
+				"\nYou are an AI assistant with knowledge only and only just this text: \"" + ragText + "\". " +
+				"\nThink step-by-step and then answer briefly in " + languageCapabilityDetectionText + ". If question is outside this scope, add \"@\" to the beginning of response and Just answer in " + languageCapabilityDetectionText + " something similar to \"" + llm.NotRelatedAnswer + "\" without mentioning original text or language information." +
+				"\nUser: \"" + Query + "\"" +
+				"\nAssistant:"
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
@@ -319,7 +324,7 @@ Assistant:`
 		if len(mem.Questions) > 0 {
 			QueryWithMemory += "Here is the context from our previous interactions:\n"
 			for idx, q := range mem.Questions {
-				QueryWithMemory += "\t" + strconv.Itoa(idx) + "." + q + "\n"
+				QueryWithMemory += "\t" + strconv.Itoa(idx) + "." + q.Question + "\n"
 			}
 
 		}
@@ -361,12 +366,18 @@ Assistant:`
 	result.addAction("Finished", o.ActionCallFunc)
 
 	// Update memory with the new query if RAG data was found
-	if hasRag && memoryAddAllowed {
+	if hasRag && memoryAddAllowed&&response.Choices != nil && len(response.Choices) > 0 {
+		memoryData := MemoryData{
+			Question: Query,
+			Answer:   response.Choices[0].Content,
+		}
 		if exists {
-			mem.Questions = append(mem.Questions, Query)
+			
+			mem.Questions = append(mem.Questions, memoryData)
 			llm.MemoryManager.AddMemory(o.SessionID, mem.Questions)
+
 		} else {
-			llm.MemoryManager.AddMemory(o.SessionID, []string{Query})
+			llm.MemoryManager.AddMemory(o.SessionID, []MemoryData{memoryData})
 		}
 	}
 	result = LLMResult{
@@ -456,6 +467,14 @@ func (llm *LLMContainer) WithEmbeddingIndex(Index string) LLMCallOption {
 		o.Index = Index
 	}
 }
+
+// SearchAll specifies the scope of search,
+//
+// Parameters:
+//   - language: scope of general search in specific language
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
 func (llm *LLMContainer) SearchAll(language string) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		// o.Prefix = "all:"+language
@@ -495,4 +514,17 @@ func (o *LLMCallOptions) getEmbeddingPrefix() string {
 		o.Prefix = "default"
 	}
 	return o.Prefix
+}
+
+// WithEmbeddingPrefix specifies a prefix for identifying related embeddings.
+//
+// Parameters:
+//   - Prefix: A string prefix used to group or identify embeddings in the store.
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
+func (llm *LLMContainer) WithLimitGeneralEmbedding(denied bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.LimitGeneralEmbedding = denied
+	}
 }
