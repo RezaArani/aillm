@@ -58,6 +58,7 @@ type LLMResult struct {
 	Actions  []LLMAction
 }
 
+
 // Each action should be a timestamp for benchmarking or output management
 type LLMAction struct {
 	Action    interface{} `json:"action"`
