@@ -26,14 +26,25 @@ import (
 //   - Questions: A slice of strings representing the list of user queries in the session.
 //   - MemoryStartTime: A timestamp indicating when the session started.
 type Memory struct {
-	Questions       []MemoryData  // Stores user queries during the session
-	MemoryStartTime time.Time // Timestamp when the session started
+	Questions       []MemoryData // Stores user queries during the session
+	MemoryStartTime time.Time    // Timestamp when the session started
 }
 
-type MemoryData struct{
+
+// Memory structure to store user memory question data.
+//
+// This struct keeps track of a user's questions and the session data in Redis.
+//
+// Fields:
+//   - Questions: A string representing the user query.
+//   - Answer: A string representing the LLM response to the query.
+//   - Keys: A slice of strings that keeps keys of Redis vector data related to this question.
+type MemoryData struct {
 	Question string
-	Answer string
+	Answer   string
+	Keys     []string
 }
+
 // MemoryManager manages session memories with a time-to-live (TTL) mechanism.
 //
 // This struct is responsible for storing user sessions, providing thread-safe access
@@ -43,7 +54,6 @@ type MemoryData struct{
 //   - memoryMap: A map storing session ID as the key and Memory struct as the value.
 //   - mu: A mutex to ensure thread-safe operations on the memory map.
 //   - ttl: The time-to-live (TTL) duration after which sessions will be removed automatically.
-
 type MemoryManager struct {
 	memoryMap map[string]Memory // Stores session data with session ID as the key
 	mu        sync.Mutex        // Mutex to prevent concurrent access issues

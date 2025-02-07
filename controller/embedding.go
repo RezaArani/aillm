@@ -106,12 +106,14 @@ func (llm *LLMContainer) InitEmbedding() error {
 // 	 - title: The title associated with the content to be embedded inline with contents for better retrival.
 //   - Index: The Index associated with the content to be embedded.
 //   - source: Source of selected data.
+//	 - GeneralEmbeddingDenied , prevents indexing in global search
+//	 - rawKey, won't allow to process the index key automatically. (for some specific actions like memory search)
 
 // Returns:
 //   - []string: A slice of keys representing the stored embeddings in the vector database.
 //   - int: The number of chunks the text was split into.
 //   - error: An error if the embedding process fails.
-func (llm *LLMContainer) embedText(prefix, language, index, title, contents, source string, GeneralEmbeddingDenied bool) ([]string, []string, int, error) {
+func (llm *LLMContainer) embedText(prefix, language, index, title, contents, source string, GeneralEmbeddingDenied,rawKey bool) ([]string, []string, int, error) {
 	var docList []string
 	var generalDocList []string
 	// Check if the embedding model is available
@@ -159,7 +161,12 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents, sou
 	}
 
 	// Setup Redis vector store with index name and embedding model
-	redisVector := redisvector.WithIndexName("context:"+prefix+":"+index+":"+language+":aillm_vector_idx", true)
+	keyName := prefix+":"+index
+	if !rawKey {
+		keyName = "context:" + prefix + ":" + index + ":" + language + ":aillm_vector_idx"
+		// "context:"+prefix+":"+index+":"+language+":aillm_vector_idx"
+	}
+	redisVector := redisvector.WithIndexName(keyName, true)
 	embedderVector := redisvector.WithEmbedder(embedder)
 
 	// Retrieve Redis host URL for connection
@@ -182,7 +189,7 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents, sou
 		if err != nil {
 			return docList, generalDocList, 0, splitErr
 		}
-		if !GeneralEmbeddingDenied {
+		if !GeneralEmbeddingDenied && !rawKey {
 			generalRedisVector := redisvector.WithIndexName("all:"+prefix+":"+language+":aillm_vector_idx", true)
 			generalStore, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), generalRedisVector, embedderVector)
 			if err != nil {

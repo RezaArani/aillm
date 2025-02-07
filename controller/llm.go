@@ -19,7 +19,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
+	"regexp"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 
@@ -116,6 +117,7 @@ func (llm *LLMContainer) Init() error {
 	if llm.NotRelatedAnswer == "" {
 		llm.NotRelatedAnswer = "I can't find any answer regarding your question."
 	}
+	llm.initPersistentMemoryManager()
 
 	return err
 }
@@ -136,7 +138,6 @@ func (llm *LLMContainer) Init() error {
 // Returns:
 //   - LLMResult: Struct containing the AI-generated response, retrieved documents, session memory, and logged actions.
 //   - error: An error if the query fails or if essential components are missing.
-
 func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResult, error) {
 
 	result := LLMResult{}
@@ -151,9 +152,27 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		o.searchAll = true
 	}
 	result.addAction("Start Calling LLM", o.ActionCallFunc)
+	memoryStr := ""
+	KNNMemoryStr := ""
+	exists := false
+	var memoryData []MemoryData
+	if o.SessionID != "" {
 
-	mem, exists := llm.MemoryManager.GetMemory(o.SessionID)
+		if !o.PersistentMemory {
+			mem, smExists := llm.MemoryManager.GetMemory(o.SessionID)
+			for _, memoryItem := range mem.Questions {
+				KNNMemoryStr += "\n" + memoryItem.Question
+			}
+			memoryData = mem.Questions
 
+			exists = smExists
+		} else {
+			// gget memory data:
+			lastQuery := MemoryData{}
+			lastQuery, memoryStr, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
+			KNNMemoryStr += lastQuery.Question + " " + lastQuery.Answer
+		}
+	}
 	ctx := context.Background()
 	memoryAddAllowed := false
 	llmclient, err := llm.LLMClient.NewLLMClient()
@@ -205,9 +224,8 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		KNNQuery := Query
 
 		// Append past session queries to provide context
-
-		for _, memoryItem := range mem.Questions {
-			KNNQuery += "\n" + memoryItem.Question
+		if KNNMemoryStr != "" {
+			KNNQuery += "\n" + KNNMemoryStr
 		}
 		// KNNQuery += Query
 
@@ -232,7 +250,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			}
 		}
 		// Check if relevant documents were retrieved
-		hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0 && o.ExtraContext == ""
+		hasRag = (resDocs != nil && len(resDocs.([]schema.Document)) > 0) || o.ExtraContext != ""
 
 		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
 			searchPrefix := o.getEmbeddingPrefix() + ":" + llm.FallbackLanguage + ":"
@@ -269,8 +287,33 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
 		languageCapabilityDetectionText := `detected language without mentioning it.`
 		if llm.LLMModelLanguageDetectionCapability {
-			languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
-			languageCapabilityDetectionText = "{language}"
+			if llm.userLanguage == nil {
+				llm.userLanguage = make(map[string]string)
+			}
+			if llm.userLanguage[o.SessionID] == "" {
+				langResponse, langErr := llmclient.GenerateContent(ctx,
+					[]llms.MessageContent{
+
+						llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without ".".`),
+					},
+					llms.WithTemperature(0))
+				if len(langResponse.Choices) > 0 {
+					llm.userLanguage[o.SessionID] = langResponse.Choices[0].Content
+				}
+				if langErr != nil || llm.userLanguage[o.SessionID] == "" {
+					//unable to detect language
+					languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
+					languageCapabilityDetectionText = "{language}"
+				} else {
+					// language detected, will be saved for the session.
+					languageCapabilityDetectionFunction = ""
+					languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
+				}
+			} else {
+				languageCapabilityDetectionFunction = ""
+				languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
+
+			}
 
 		} else {
 			if llm.AnswerLanguage != "" {
@@ -298,38 +341,57 @@ Assistant:`
 				if idx > 0 {
 					ragText += "\n"
 				}
-				ragText += doc.PageContent
+				content := doc.PageContent
+				if o.CotextCleanup {
+					re := regexp.MustCompile(`<[^>]+>`)
+					content = re.ReplaceAllString(content, "")
+
+					// جایگزینی فضاهای تکراری با یک فضای واحد
+					reSpaces := regexp.MustCompile(`\s+`)
+					content = reSpaces.ReplaceAllString(content, " ")
+
+					// حذف خطوط خالی تکراری
+					reNewlines := regexp.MustCompile(`\n+`)
+					content = reNewlines.ReplaceAllString(content, "\n")
+
+					// حذف فاصله‌های اضافی ابتدا و انتها
+					content = strings.TrimSpace(content)
+				}
+				ragText += content
 			}
 			ragText += "\n" + o.ExtraContext
+			memStrPrompt:= ""
+			if memoryStr != "" {
+				memStrPrompt = "Here is the context from our previous interactions:\n" + memoryStr
+			}
+			ragText := fmt.Sprintf(`You are a %s AI assistant with knowledge:
+%s
+
+%s
+
+Think step-by-step and then answer briefly in %s.
+If question is outside this scope, add "@" to the beginning of response and Just answer in %s something similar to 
+"I can't find any answer regarding your question." 
+without mentioning original text or language information.
+
+User: %s
+Assistant:`,
+				o.character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, Query)
+
 			// ragText = languageCapabilityDetectionFunction +
-			// 	`\nYou are an AI assistant with knowledge only and only just this text: "` + ragText + `". ` +
-			// 	`\nThink step-by-step and then answer briefly in ` + languageCapabilityDetectionText + `. If question is outside this scope, add "@" to the beginning of response and Just answer in ` + languageCapabilityDetectionText + ` something similar to "` + llm.NotRelatedAnswer + ` without mentioning original text or language information."` +
-			// 	`\nUser: "` + Query + `"` +
-			// 	`\nAssistant:`
-			ragText = languageCapabilityDetectionFunction +
-				"\nYou are an AI assistant with knowledge only and only just this text: \"" + ragText + "\". " +
-				"\nThink step-by-step and then answer briefly in " + languageCapabilityDetectionText + ". If question is outside this scope, add \"@\" to the beginning of response and Just answer in " + languageCapabilityDetectionText + " something similar to \"" + llm.NotRelatedAnswer + "\" without mentioning original text or language information." +
-				"\nUser: \"" + Query + "\"" +
-				"\nAssistant:"
+			// 	"\nYou are "+o.character+" AI assistant with knowledge only and only just this text: \"" + ragText + "\". " +
+			// 	"\nThink step-by-step and then answer briefly in " + languageCapabilityDetectionText + ". If question is outside this scope, add \"@\" to the beginning of response and Just answer in " + languageCapabilityDetectionText + " something similar to \"" + llm.NotRelatedAnswer + "\" without mentioning original text or language information.\n" +
+			// 	memoryStr+
+			// 	"\nUser: \"" + Query + "\"" +
+			// 	"\nAssistant:"
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
 			msgs = append(msgs, curMessageContent)
 		}
 
-		// Include session history in the query
-
-		QueryWithMemory := Query
-
-		if len(mem.Questions) > 0 {
-			QueryWithMemory += "Here is the context from our previous interactions:\n"
-			for idx, q := range mem.Questions {
-				QueryWithMemory += "\t" + strconv.Itoa(idx) + "." + q.Question + "\n"
-			}
-
-		}
-
-		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, QueryWithMemory))
+		 
+		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
 		memoryAddAllowed = hasRag
 	} else {
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, o.ExactPrompt))
@@ -365,26 +427,35 @@ Assistant:`
 	)
 	result.addAction("Finished", o.ActionCallFunc)
 
-	// Update memory with the new query if RAG data was found
-	if hasRag && memoryAddAllowed&&response.Choices != nil && len(response.Choices) > 0 {
-		memoryData := MemoryData{
-			Question: Query,
-			Answer:   response.Choices[0].Content,
-		}
-		if exists {
-			
-			mem.Questions = append(mem.Questions, memoryData)
-			llm.MemoryManager.AddMemory(o.SessionID, mem.Questions)
+	memoryAddAllowed = memoryAddAllowed && o.SessionID != ""
+	if response != nil {
 
-		} else {
-			llm.MemoryManager.AddMemory(o.SessionID, []MemoryData{memoryData})
+		// Update memory with the new query if RAG data was found
+		if hasRag && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
+			queryData := MemoryData{
+				Question: Query,
+				Answer:   response.Choices[0].Content,
+			}
+
+			if !o.PersistentMemory {
+				//plain memory
+				if exists {
+					memoryData = append(memoryData, queryData)
+				}
+				llm.MemoryManager.AddMemory(o.SessionID, memoryData)
+
+			} else {
+				//persistent memory
+				llm.PersistentMemoryManager.AddMemory(o.SessionID, queryData)
+
+			}
 		}
 	}
 	result = LLMResult{
 		Prompt:   msgs,
 		Response: response,
 		RagDocs:  resDocs,
-		Memory:   mem.Questions[:],
+		Memory:   memoryData[:],
 		Actions:  result.Actions,
 	}
 	return result, err
@@ -526,5 +597,44 @@ func (o *LLMCallOptions) getEmbeddingPrefix() string {
 func (llm *LLMContainer) WithLimitGeneralEmbedding(denied bool) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		o.LimitGeneralEmbedding = denied
+	}
+}
+
+// WithCotextCleanup Cleanup retrieved context, specially html codes to make a clear context
+//
+// Parameters:
+//   - cleanup: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
+func (llm *LLMContainer) WithCotextCleanup(cleanup bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.CotextCleanup = cleanup
+	}
+}
+
+// WithPersistentMemory enhances the memory by using vector search to create more efficient prompts for conversation memory
+//
+// Parameters:
+//   - usePersistentMemory: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
+func (llm *LLMContainer) WithPersistentMemory(usePersistentMemory bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.PersistentMemory = usePersistentMemory
+	}
+}
+
+// WithPersistentMemory enhances the memory by using vector search to create more efficient prompts for conversation memory
+//
+// Parameters:
+//   - usePersistentMemory: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the embedding prefix.
+func (llm *LLMContainer) WithCharacter(character string) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.character = character
 	}
 }

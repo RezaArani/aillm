@@ -79,7 +79,10 @@ type LLMCallOptions struct {
 	ExactPrompt           string
 	searchAll             bool
 	LimitGeneralEmbedding bool
+	CotextCleanup         bool
 	searchAllLanguage     string
+	character             string
+	PersistentMemory      bool
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.
@@ -142,24 +145,26 @@ const (
 //   - Character: A personality trait or characteristic assigned to the AI assistant (e.g., formal, friendly).
 //   - Transcriber: Component responsible for converting speech or text inputs into usable data.
 type LLMContainer struct {
-	Embedder                            EmbeddingClient // Embedding client to handle text processing
-	EmbeddingConfig                     EmbeddingConfig // Configuration for text chunking
-	LLMClient                           LLMClient       // AI model client for generating responses
-	MemoryManager                       *MemoryManager  // Session-based memory management
-	LLMModelLanguageDetectionCapability bool            // Language detection capability flag
-	AnswerLanguage                      string          // Default answer language - will be ignored if  LLMModelLanguageDetectionCapability = true
-	RedisClient                         RedisClient     // Redis client for caching and retrieval
-	SearchAlgorithm                     int             // Semantic search algorithm Cosine Similarity or The k-nearest neighbors
-	Temperature                         float64         // Controls randomness of model output
-	TopP                                float64         // Probability threshold for response diversity
-	ScoreThreshold                      float32         // Threshold for RAG-based responses
-	RagRowCount                         int             // Number of RAG rows to retrieve for context
-	AllowHallucinate                    bool            // Enables/disables AI-generated responses when data is
-	FallbackLanguage                    string          // Default language fallback
-	NoRagErrorMessage                   string          // Message shown when RAG results are empty
-	NotRelatedAnswer                    string          // Predefined response for unrelated queries
-	Character                           string          // AI assistant's character/personality settings
-	Transcriber                         Transcriber     // Responsible for processing and transcribing content
+	Embedder                            EmbeddingClient   // Embedding client to handle text processing
+	EmbeddingConfig                     EmbeddingConfig   // Configuration for text chunking
+	LLMClient                           LLMClient         // AI model client for generating responses
+	MemoryManager                       *MemoryManager    // Session-based memory management
+	LLMModelLanguageDetectionCapability bool              // Language detection capability flag
+	userLanguage                        map[string]string // User session language
+	AnswerLanguage                      string            // Default answer language - will be ignored if  LLMModelLanguageDetectionCapability = true
+	RedisClient                         RedisClient       // Redis client for caching and retrieval
+	SearchAlgorithm                     int               // Semantic search algorithm Cosine Similarity or The k-nearest neighbors
+	Temperature                         float64           // Controls randomness of model output
+	TopP                                float64           // Probability threshold for response diversity
+	ScoreThreshold                      float32           // Threshold for RAG-based responses
+	RagRowCount                         int               // Number of RAG rows to retrieve for context
+	AllowHallucinate                    bool              // Enables/disables AI-generated responses when data is
+	FallbackLanguage                    string            // Default language fallback
+	NoRagErrorMessage                   string            // Message shown when RAG results are empty
+	NotRelatedAnswer                    string            // Predefined response for unrelated queries
+	Character                           string            // AI assistant's character/personality settings
+	Transcriber                         Transcriber       // Responsible for processing and transcribing content
+	PersistentMemoryManager             PersistentMemory  // Advanced Memory manager controller
 
 }
 
