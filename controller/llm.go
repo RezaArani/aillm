@@ -335,6 +335,23 @@ Assistant:`
 				} else {
 					return result, errors.New("rag query has no results and hallucination is allowed but NoRagErrorMessage is empty")
 				}
+			} else {
+				// allow hallucinate - reload memory
+				if memoryStr != "" {
+					memStrPrompt := "Here is the context from our previous interactions:\n" + memoryStr
+					ragText = fmt.Sprintf(`You are a %s AI assistant with knowledge:
+%s
+Think step-by-step and then answer briefly in %s.
+without mentioning original text or language information.
+User: %s
+Assistant:`,
+						o.character, memStrPrompt, languageCapabilityDetectionText, Query)
+					ragArray = append(ragArray, llms.TextPart(ragText))
+					curMessageContent.Parts = ragArray
+					curMessageContent.Role = llms.ChatMessageTypeSystem
+					msgs = append(msgs, curMessageContent)
+
+				}
 			}
 		} else {
 			for idx, doc := range resDocs.([]schema.Document) {
@@ -360,11 +377,11 @@ Assistant:`
 				ragText += content
 			}
 			ragText += "\n" + o.ExtraContext
-			memStrPrompt:= ""
+			memStrPrompt := ""
 			if memoryStr != "" {
 				memStrPrompt = "Here is the context from our previous interactions:\n" + memoryStr
 			}
-			ragText := fmt.Sprintf(`You are a %s AI assistant with knowledge:
+			ragText = fmt.Sprintf(`You are a %s AI assistant with knowledge:
 %s
 
 %s
@@ -378,21 +395,14 @@ User: %s
 Assistant:`,
 				o.character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, Query)
 
-			// ragText = languageCapabilityDetectionFunction +
-			// 	"\nYou are "+o.character+" AI assistant with knowledge only and only just this text: \"" + ragText + "\". " +
-			// 	"\nThink step-by-step and then answer briefly in " + languageCapabilityDetectionText + ". If question is outside this scope, add \"@\" to the beginning of response and Just answer in " + languageCapabilityDetectionText + " something similar to \"" + llm.NotRelatedAnswer + "\" without mentioning original text or language information.\n" +
-			// 	memoryStr+
-			// 	"\nUser: \"" + Query + "\"" +
-			// 	"\nAssistant:"
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
 			msgs = append(msgs, curMessageContent)
 		}
 
-		 
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
-		memoryAddAllowed = hasRag
+		memoryAddAllowed = hasRag || llm.AllowHallucinate
 	} else {
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, o.ExactPrompt))
 	}
@@ -431,7 +441,7 @@ Assistant:`,
 	if response != nil {
 
 		// Update memory with the new query if RAG data was found
-		if hasRag && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
+		if (hasRag||llm.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
 			queryData := MemoryData{
 				Question: Query,
 				Answer:   response.Choices[0].Content,

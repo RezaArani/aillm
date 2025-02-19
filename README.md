@@ -8,8 +8,7 @@ It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excell
   
 
 ## **Features**
-
-  
+ 
 
 1.  **LLM Client - Sync and Stream with High Compatibility**
 
@@ -25,14 +24,12 @@ It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excell
 
 - Powered by **Redis Vector Store** for fast lookups.
 
-  
 
-
-3.  **Document Transcription**
+3.  **Document Transcription and Image description generation**
 - Internet content downloader
 - Processes files such as PDFs, Word, Excel, and HTML using **Apache Tika**.
-
 - Extracts structured data, including OCR-based transcription for scanned documents.
+- Ability to call multimodal models for describing images.
   
 
 4.  **Multilingual Support**
@@ -45,29 +42,14 @@ It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excell
 
 - Leverages Redis and efficient text processing pipelines to scale with large datasets.
 
-  
 
 ## **Configuration**
-
-  
-
-
-  
-
 Configure environment variables in `.env` file:
-
-  
-
 ```env
-
 APITOKEN=your-openai-api-token //not mandatory for Ollama
-
 REDIS_HOST=localhost:6379
-
 REDIS_PASSWORD=your_redis_password
-
-TIKA_URL=http://localhost:9998/tika //not mandatory for text and html usage
-
+TIKA_URL=http://localhost:9998/tika //not mandatory for text, html or multimodal model usage and should be used just for PDF,MS-Word, MS-Excel & ...
 ```
 
   
@@ -152,42 +134,34 @@ With SemMapas, you can effortlessly map out venues, highlight points of interest
 Our platform goes beyond traditional mapping services, offering a comprehensive suite of features tailored to meet the diverse needs of event organizers and businesses alike. From tourism guides to event navigation, SemMapas empowers you to create immersive experiences that captivate your audience and enhance their journey.
 Our project has been launched since 2023 in Portugal.
 `
-
-
 ```
 
-  
-
 ## **TODO**
-
-  
-
 - Implement **parallelism** to optimize processing efficiency.
-
 - Improve **context management** to enhance memory retention and retrieval capabilities.
-
 - Enhance the chatbot integration by supporting additional LLM models.
 - Dockerized version with Reset Service and Websocket web server.
 
-  
+### 📢 Recent Updates  
+
+We have introduced a new feature that enables **image description using AI models** with just a few lines of code! 🎉 Now, you can effortlessly generate **detailed textual descriptions of images** by simply passing an image file and a text query to the model. The integration is seamless, requiring minimal setup while leveraging **powerful vision models** to analyze and interpret images. Check out the `DescribeImage` and `DescribeImageFromFile` functions to get started! 🚀
 
 ## **License**
-
-  
-
 This project is licensed under the **Apache License, Version 2.0**.
-  
+ 
 
 ## **Contact**
-
-  
-
 For inquiries or support, reach out via:
 
-  
-
 - 📧 Email: reza.arani@gmail.com
-
 - 🌐 Website: [semmapas.com](https://semmapas.com)
-
 - 🐦 Twitter: [@RezaArani2](https://twitter.com/RezaArani2)
+
+
+### 🙌 Special Thanks to OVHCloud  
+
+A huge thanks to **[OVHCloud](https://www.ovh.cloud/)** for their fantastic **AI Endpoints**, which power our model with high-performance and scalable infrastructure. Their support has been instrumental in making AI-driven image description **fast, efficient, and reliable**.  
+
+![OVHCloud](https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Logo-OVH.svg/110px-Logo-OVH.svg.png)  
+
+🔗 Learn more about OVHCloud AI Endpoints: [OVHCloud AI](https://endpoints.ai.cloud.ovh.net/) 🚀

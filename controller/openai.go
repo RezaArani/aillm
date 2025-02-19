@@ -43,7 +43,7 @@ type OpenAIController struct {
 func (oc *OpenAIController) NewEmbedder() (embeddings.Embedder, error) {
 	return embeddings.NewEmbedder(oc.LLMController)
 }
- 
+
 // NewLLMClient initializes and returns a new instance of the OpenAI LLM client.
 //
 // This function sets up the OpenAI model based on the provided API token, API base URL,
@@ -52,11 +52,11 @@ func (oc *OpenAIController) NewEmbedder() (embeddings.Embedder, error) {
 // Returns:
 //   - llms.Model: The initialized LLM model instance.
 //   - error: An error if the initialization fails.
-func (oc *OpenAIController) NewLLMClient()  (llms.Model,error){
+func (oc *OpenAIController) NewLLMClient() (llms.Model, error) {
 	var err error
-	oc.LLMController,err =  openai.New(openai.WithToken(oc.Config.APIToken), openai.WithBaseURL(oc.Config.Apiurl), openai.WithModel(oc.Config.AiModel),openai.WithEmbeddingModel(oc.Config.AiModel))
+	oc.LLMController, err = openai.New(openai.WithToken(oc.Config.APIToken), openai.WithBaseURL(oc.Config.Apiurl), openai.WithModel(oc.Config.AiModel), openai.WithEmbeddingModel(oc.Config.AiModel))
 	//  openai.New(openai.WithToken(oc.Config.APIToken), openai.WithBaseURL(oc.Config.Apiurl), openai.WithModel(oc.Config.AiModel))
-	return  oc.LLMController,err
+	return oc.LLMController, err
 }
 
 // initialized checks if the OpenAI LLM client has been successfully initialized.
@@ -66,6 +66,10 @@ func (oc *OpenAIController) NewLLMClient()  (llms.Model,error){
 //
 // Returns:
 //   - bool: True if the LLMController is initialized, otherwise false.
-func (oc *OpenAIController)initialized()bool{
-	return  oc.LLMController !=nil
+func (oc *OpenAIController) initialized() bool {
+	return oc.LLMController != nil
+}
+
+func (oc *OpenAIController) GetConfig() LLMConfig {
+	return oc.Config
 }

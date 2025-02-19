@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/tmc/langchaingo/schema"
 )
 
 // PersistentMemory structure to store user memory session data in a persistent storage (Redis) for future retrival or vector search.
@@ -39,9 +38,7 @@ type PersistentMemory struct {
 	lLMContainer          *LLMContainer // LLM container for embedding and vector search
 }
 
-
 // initPersistentMemoryManager initializes the persistent memory manager based on default configuration.
-//
 //
 // Returns:
 //   - error: Returns an error if initialization fails or if the provider is unsupported.
@@ -58,8 +55,6 @@ func (llm *LLMContainer) initPersistentMemoryManager() {
 	llm.PersistentMemoryManager = *persistentMemory
 
 }
-
-
 
 // AddMemory stores user questions in Redis and Embeds query to vector database for future related questions.
 //
@@ -107,8 +102,6 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 	return err
 }
 
-
-
 // GetMemory retrieves stored session memory for a given session ID.
 //
 // The function safely reads from the session map and returns the stored memory if it exists.
@@ -142,18 +135,18 @@ func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryDat
 			result += "User: " + secondLastQuestion.Question + "\nAssistant:" + secondLastQuestion.Answer + "\n"
 			resDocs, searchErr := pm.lLMContainer.CosineSimilarity(embeddingPrefix, query, pm.HistoryItemCount, pm.MemorySearchThreshold)
 			err = searchErr
-			for _, doc := range resDocs.([]schema.Document) {
+
+			for _, doc := range resDocs {
 				result += doc.PageContent
 			}
+
 		}
 		result += "User: " + lastQuestion.Question + "\nAssistant:" + lastQuestion.Answer + "\n"
 	}
 	return lastQuestion, result, err
 }
 
-
 // DeleteMemory removes a user's session memory from the memory map.
-//
 //
 // Parameters:
 //   - sessionID: The unique identifier for the session to be deleted.

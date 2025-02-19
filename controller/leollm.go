@@ -89,9 +89,11 @@ type LLMCallOptions struct {
 //
 // Methods:
 //   - NewLLMClient(): Creates and returns an instance of an LLM model, or returns an error if the initialization fails.
+//   - GetConfig(): returns configuration of current instance of LLM model.
 type LLMClient interface {
 	// NewLLMClient initializes and returns an LLM model instance.
 	NewLLMClient() (llms.Model, error)
+	GetConfig() LLMConfig
 }
 
 // EmbeddingConfig holds the configuration settings for text chunking during embedding operations.
@@ -148,6 +150,7 @@ type LLMContainer struct {
 	Embedder                            EmbeddingClient   // Embedding client to handle text processing
 	EmbeddingConfig                     EmbeddingConfig   // Configuration for text chunking
 	LLMClient                           LLMClient         // AI model client for generating responses
+	VisionClient                        LLMClient         // AI model client for image vision responses
 	MemoryManager                       *MemoryManager    // Session-based memory management
 	LLMModelLanguageDetectionCapability bool              // Language detection capability flag
 	userLanguage                        map[string]string // User session language

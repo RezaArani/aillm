@@ -32,7 +32,6 @@ type OllamaController struct {
 	LLMController *ollama.LLM // Instance of the Ollama LLM client
 }
 
-
 // NewEmbedder initializes and returns an Ollama embedding model instance.
 //
 // This function implements the EmbeddingClient interface to create and return an embedding model
@@ -68,4 +67,8 @@ func (oc *OllamaController) NewLLMClient() (llms.Model, error) {
 //   - bool: True if the LLMController is initialized, otherwise false.
 func (oc *OllamaController) initialized() bool {
 	return oc.LLMController != nil
+}
+
+func (oc *OllamaController) GetConfig() LLMConfig {
+	return oc.Config
 }

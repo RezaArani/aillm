@@ -14,7 +14,7 @@ func main() {
 	llmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
 			Apiurl:  "http://127.0.0.1:11434",
-			AiModel: "llama3.1",
+			AiModel: "llama3.1:latest",
 		},
 	}
 	// Create an LLM instance with OllamaClient

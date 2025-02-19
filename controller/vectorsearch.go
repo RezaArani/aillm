@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/vectorstores"
 	"github.com/tmc/langchaingo/vectorstores/redisvector"
 )
@@ -37,7 +38,8 @@ import (
 // Returns:
 //   - interface{}: The search results containing the most similar documents.
 //   - error: An error if the search fails or the embedding model is missing.
-func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, ScoreThreshold float32) (interface{}, error) {
+func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, ScoreThreshold float32) ([]schema.Document, error) {
+	var result []schema.Document
 	if llm.Embedder == nil {
 		return nil, errors.New("missing embedding model")
 	} else {
@@ -49,7 +51,7 @@ func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, Sc
 	// Get the embedder from the client
 	embedder, err := llm.Embedder.NewEmbedder()
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
 	// Setup Redis vector store
@@ -58,11 +60,11 @@ func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, Sc
 
 	redisHostURL, redisConnectionErr := llm.getRedisHost()
 	if redisConnectionErr != nil {
-		return nil, redisConnectionErr
+		return result, redisConnectionErr
 	}
 	store, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), redisVector, embedderVector)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	ctx := context.Background()
 	optionsVector := []vectorstores.Option{
@@ -70,8 +72,8 @@ func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, Sc
 		vectorstores.WithEmbedder(embedder),
 	}
 	results, err := store.SimilaritySearch(ctx, Query, rowCount, optionsVector...)
-	if err != nil && !strings.Contains(err.Error(),"no such index")  {
-		return nil, fmt.Errorf("search error: %v", err)
+	if err != nil && !strings.Contains(err.Error(), "no such index") {
+		return result, fmt.Errorf("search error: %v", err)
 	}
 	return results, nil
 }
@@ -88,25 +90,27 @@ func (llm *LLMContainer) CosineSimilarity(prefix, Query string, rowCount int, Sc
 //   - ScoreThreshold: The minimum similarity score for considering results.
 //
 // Returns:
-//   - interface{}: The retrieved relevant documents.
+//   - []schema.Document: The retrieved relevant documents.
 //   - error: An error if the search fails or the embedding model is missing.
-func (llm *LLMContainer) FindKNN(prefix, searchQuery string, rowCount int, ScoreThreshold float32) (interface{}, error) {
+func (llm *LLMContainer) FindKNN(prefix, searchQuery string, rowCount int, ScoreThreshold float32) ([]schema.Document, error) {
+	var result []schema.Document
+
 	// llm.CosineSimilarity(prefix, searchQuery,rowCount,ScoreThreshold)
 	embedder, err := llm.Embedder.NewEmbedder()
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
 	redisVector := redisvector.WithIndexName(prefix+"aillm_vector_idx", true)
 	embedderVector := redisvector.WithEmbedder(embedder)
 	redisHostURL, redisConnectionErr := llm.getRedisHost()
 	if redisConnectionErr != nil {
-		return nil, redisConnectionErr
+		return result, redisConnectionErr
 	}
 
 	store, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), redisVector, embedderVector)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
 	optionsVector := []vectorstores.Option{
@@ -118,7 +122,7 @@ func (llm *LLMContainer) FindKNN(prefix, searchQuery string, rowCount int, Score
 
 	resDocs, err := retriever.GetRelevantDocuments(context.Background(), searchQuery)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	return resDocs, nil
 }
