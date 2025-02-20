@@ -83,6 +83,7 @@ type LLMCallOptions struct {
 	searchAllLanguage     string
 	character             string
 	PersistentMemory      bool
+	MaxTokens	int
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.

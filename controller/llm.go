@@ -648,3 +648,18 @@ func (llm *LLMContainer) WithCharacter(character string) LLMCallOption {
 		o.character = character
 	}
 }
+
+
+
+// WithLanguage specifies the language to use for the query response.
+//
+// Parameters:
+//   - Language: The language in which the LLM should generate responses.
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithMaxTokens(maxTokens int) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.MaxTokens = maxTokens
+	}
+}

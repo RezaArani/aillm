@@ -27,6 +27,8 @@ func main() {
 			Apiurl:   "https://llava-next-mistral-7b.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
 			AiModel:  "llava-next-mistral-7b",
 			APIToken: os.Getenv("APITOKEN"), // API token should be set in environment variables
+			// Apiurl:   "https://api.openai.com/v1/",
+			// AiModel:  "gpt-4o-mini",
 		},
 	}
 	// Create LLMContainer instance with the vision client and a confidence score threshold
@@ -44,7 +46,7 @@ func main() {
 
 // Describe sends an image and query to the AI model for processing.
 //
-// This function calls `DescribeImage` from `LLMContainer`, passing an image file (`steak.jpg`) 
+// This function calls `DescribeImage` from `LLMContainer`, passing an image file (`steak.jpg`)
 // and a text prompt to generate a description. The response is logged to the console.
 //
 // Parameters:
@@ -55,7 +57,8 @@ func main() {
 //   - Logs the AI-generated description of the image or exits with an error if the request fails.
 //
 // Example Usage:
-//   Describe(llm, "Describe this dish.")
+//
+//	Describe(llm, "Describe this dish.")
 //
 // Notes:
 //   - The function expects `steak.jpg` to be present in the working directory.
@@ -69,6 +72,6 @@ func Describe(llm aillm.LLMContainer, query string) {
 		log.Fatal(err)
 	}
 	// Log the response from AI model
-	log.Println(imageDescription)
+	log.Println(imageDescription.Choices[0].Message.Content)
 
 }

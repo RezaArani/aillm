@@ -15,13 +15,61 @@ package aillm
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"time"
+
+	"github.com/gabriel-vasile/mimetype"
 )
+
+// Structures needed for the request
+type ChatCompletionRequest struct {
+	Model            string            `json:"model"`
+	Messages         []Message         `json:"messages"`
+	Temperature      float64           `json:"temperature"`
+	MaxTokens        int               `json:"max_completion_tokens"`
+	TopP             float64           `json:"top_p"`
+	FrequencyPenalty float64           `json:"frequency_penalty"`
+	PresencePenalty  float64           `json:"presence_penalty"`
+	ResponseFormat   map[string]string `json:"response_format"`
+}
+
+type Message struct {
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"`
+}
+
+// Structures needed for the response
+type ChatCompletionResponse struct {
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
+}
+
+type Choice struct {
+	Index        int          `json:"index"`
+	Message      ReplyMessage `json:"message"`
+	FinishReason string       `json:"finish_reason"`
+}
+
+type ReplyMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
 
 // DescribeImage sends an image along with a text query to an AI vision model for description.
 //
@@ -51,83 +99,93 @@ import (
 //   - It expects a valid API token to be set in `llm.VisionClient.GetConfig().APIToken`.
 //   - The function handles HTTP request creation, response validation, and JSON parsing.
 //   - If the API response structure changes, parsing logic might require adjustments.
-func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LLMCallOption) (string, error) {
 
-	// setup payload JSON
-	payload := map[string]interface{}{
-		"messages": []map[string]interface{}{
+func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LLMCallOption) (ChatCompletionResponse, error) {
+	o := LLMCallOptions{}
+	for _, opt := range options {
+		opt(&o)
+	}
+
+	if o.MaxTokens == 0 {
+		o.MaxTokens = 2048
+	}
+	config := llm.VisionClient.GetConfig()
+	apiKey := config.APIToken
+	url := config.Apiurl + "chat/completions"
+	response := ChatCompletionResponse{}
+	request := ChatCompletionRequest{
+		Model: config.AiModel,
+		Messages: []Message{
 			{
-				"name": "User",
-				"role": "user",
-				"content": []map[string]interface{}{
+				Role: "user",
+				Content: []map[string]interface{}{
+					{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url":  encodedImage,
+						},
+					},
 					{
 						"type": "text",
 						"text": query,
 					},
-					{
-						"type": "image_url",
-						"image_url": map[string]string{
-							"url": encodedImage,
-						},
-					},
 				},
 			},
 		},
-		"model":       llm.VisionClient.GetConfig().AiModel,
-		"temperature": llm.Temperature,
+		Temperature:      llm.Temperature,
+		MaxTokens:        o.MaxTokens,
+		TopP:             llm.TopP,
+		FrequencyPenalty: 0.0,
+		PresencePenalty:  0.0,
+		ResponseFormat:   map[string]string{"type": "text"},
 	}
 
-	jsonPayload, err := json.Marshal(payload)
+	// Convert request to JSON
+	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return "", fmt.Errorf("error serialization of JSON: %v", err)
+		return response, fmt.Errorf("Error converting request to JSON: %v\n", err)
 	}
 
-	// HTTP request
-	req, err := http.NewRequest("POST", llm.VisionClient.GetConfig().Apiurl+"chat/completions", bytes.NewBuffer(jsonPayload))
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		return "", fmt.Errorf("error creating http request, HTTP: %v", err)
+		return response, fmt.Errorf("Error creating HTTP request: %v\n", err)
 	}
 
+	// Set HTTP headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.VisionClient.GetConfig().APIToken))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
+	// Send request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("error calling ai provider: %v", err)
+		return response, fmt.Errorf("Error sending request: %v\n", err)
 	}
 	defer resp.Body.Close()
 
-	// API status check
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("خطا در پاسخ API: %d", resp.StatusCode)
-	}
-
-	// reading JSON
+	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("error reading response body from API: %v", err)
+		return response, fmt.Errorf("Error reading response: %v\n", err)
 	}
 
-	// process JSON response
-	var responseData map[string]interface{}
-	if err := json.Unmarshal(body, &responseData); err != nil {
-		return "", fmt.Errorf("error processing JSON response: %v", err)
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		return response, fmt.Errorf("API Error: Status code %d\nResponse: %s\n", resp.StatusCode, string(body))
 	}
 
-	// extracting API response
-	if choices, found := responseData["choices"].([]interface{}); found {
-		for _, choice := range choices {
-			choiceMap := choice.(map[string]interface{})
-			if message, ok := choiceMap["message"].(map[string]interface{}); ok {
-				if content, exists := message["content"].(string); exists {
-					return content, nil
-				}
-			}
-		}
+	// Convert JSON response to Go structure
+	if err := json.Unmarshal(body, &response); err != nil {
+		return response, fmt.Errorf("Error parsing JSON response: %v\n", err)
 	}
 
-	return "", fmt.Errorf("error extracting response from API")
+	// Display complete response
+	return response, nil
 }
 
 // DescribeImageFromFile reads an image file, encodes it to Base64, and sends it along with a text query
@@ -158,13 +216,19 @@ func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LL
 //   - It converts the image to a Base64-encoded string before calling `DescribeImage()`.
 //   - Requires a valid API token and properly configured `llm.VisionClient` settings.
 //   - If the image file is too large, encoding may consume significant memory.
-func (llm *LLMContainer) DescribeImageFromFile(imagePath, query string, options ...LLMCallOption) (string, error) {
+func (llm *LLMContainer) DescribeImageFromFile(imagePath, query string, options ...LLMCallOption) (ChatCompletionResponse, error) {
 	// reading image file
 	imageData, err := os.ReadFile(imagePath)
 	if err != nil {
-		return "", fmt.Errorf("error reading file: %v", err)
+		return ChatCompletionResponse{}, fmt.Errorf("error reading file: %v", err)
+	}
+
+	detectedMimeType, mimedetectionErr := mimetype.DetectFile(imagePath)
+	// checking for errors
+	if mimedetectionErr != nil {
+		return ChatCompletionResponse{}, fmt.Errorf("error detecting mime type: %v", mimedetectionErr)
 	}
 	// converting image to base64 string
-	encodedImage := fmt.Sprintf("data:;base64,%s", base64.StdEncoding.EncodeToString(imageData))
+	encodedImage := fmt.Sprintf("data:"+detectedMimeType.String()+";base64,%s", base64.StdEncoding.EncodeToString(imageData))
 	return llm.DescribeImage(encodedImage, query, options...)
 }
