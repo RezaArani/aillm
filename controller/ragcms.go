@@ -191,12 +191,12 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	}
 
 	// updating with new keys
-	tmpGeneralKeys := append(curContents.GeneralKeys, generalKeys...)
-	tmpKeys := append(curContents.GeneralKeys, tempKeys...)
+	// tmpGeneralKeys := append(curContents.GeneralKeys, generalKeys...)
+	// tmpKeys := append(curContents.GeneralKeys, tempKeys...)
 
 	curContents = Contents
-	curContents.GeneralKeys = tmpGeneralKeys
-	curContents.Keys = tmpKeys
+	curContents.GeneralKeys = generalKeys
+	curContents.Keys = tempKeys
 
 	result.Contents[Contents.Id] = curContents
 

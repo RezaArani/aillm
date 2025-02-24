@@ -64,6 +64,12 @@ type LLMAction struct {
 	TimeStamp time.Time   `json:"timestamp"`
 }
 
+// LangchainGo tools plus handlers
+type AillmTools struct {
+	Handlers map[string]func(interface{}) (string, error)
+	Tools    []llms.Tool
+}
+
 // LLMCallOption is a function that configures a LLMCallOptions.
 type LLMCallOption func(*LLMCallOptions)
 type LLMCallOptions struct {
@@ -83,7 +89,9 @@ type LLMCallOptions struct {
 	searchAllLanguage     string
 	character             string
 	PersistentMemory      bool
-	MaxTokens	int
+	MaxTokens             int
+	LanguageChannel       chan<- string
+	Tools                 AillmTools
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.

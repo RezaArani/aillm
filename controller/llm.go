@@ -15,6 +15,7 @@ package aillm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -297,8 +298,15 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 						llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without ".".`),
 					},
 					llms.WithTemperature(0))
+
 				if len(langResponse.Choices) > 0 {
 					llm.userLanguage[o.SessionID] = langResponse.Choices[0].Content
+					if o.LanguageChannel!=nil{
+						go func(){
+							o.LanguageChannel <- llm.userLanguage[o.SessionID]	
+						}()
+						
+					}
 				}
 				if langErr != nil || llm.userLanguage[o.SessionID] == "" {
 					//unable to detect language
@@ -407,11 +415,9 @@ Assistant:`,
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, o.ExactPrompt))
 	}
 	isFirstWord := true
-	result.addAction("Sending Request to LLM", o.ActionCallFunc)
 	isFirstChunk := true
 	// Generate content using the LLM and stream results via the provided callback function
-	response, err := llmclient.GenerateContent(ctx,
-		msgs,
+	calloptions := []llms.CallOption{
 		llms.WithTemperature(llm.Temperature),
 		llms.WithTopP(llm.TopP),
 		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
@@ -434,14 +440,77 @@ Assistant:`,
 			}
 			return o.StreamingFunc(ctx, chunk)
 		}),
-	)
+	}
+	var response *llms.ContentResponse
+	if len(o.Tools.Tools) > 0 {
+		result.addAction("Calling tools", o.ActionCallFunc)
+
+		messageHistory := []llms.MessageContent{
+			llms.TextParts(llms.ChatMessageTypeHuman, memoryStr),
+		}
+		resp, err := llmclient.GenerateContent(ctx, messageHistory, llms.WithTools(o.Tools.Tools))
+		if err != nil {
+			return result, err
+
+		}
+		respchoice := resp.Choices[0]
+
+		assistantResponse := llms.TextParts(llms.ChatMessageTypeAI, respchoice.Content)
+		for _, tc := range respchoice.ToolCalls {
+			assistantResponse.Parts = append(assistantResponse.Parts, tc)
+		}
+		messageHistory = append(messageHistory, assistantResponse)
+
+		for _, tc := range respchoice.ToolCalls {
+			if o.Tools.Handlers[tc.FunctionCall.Name] != nil {
+				fn := o.Tools.Handlers[tc.FunctionCall.Name]
+				var params interface{}
+				if err := json.Unmarshal([]byte(tc.FunctionCall.Arguments), &params); err != nil {
+					log.Fatal(err)
+				}
+				fnresult, handlererr := fn(params)
+				if handlererr != nil {
+					return result, handlererr
+				}
+				toolResponse := llms.MessageContent{
+					Role: llms.ChatMessageTypeTool,
+					Parts: []llms.ContentPart{
+						llms.ToolCallResponse{
+							Name:    tc.FunctionCall.Name,
+							Content: fnresult,
+						},
+					},
+				}
+
+				messageHistory = append(messageHistory, toolResponse)
+			}
+		}
+
+		result.addAction("Sending Request to LLM", o.ActionCallFunc)
+
+		response, err = llmclient.GenerateContent(ctx,
+			msgs,
+			calloptions...,
+		)
+		if err != nil {
+			return result, err
+		}
+
+	} else {
+		result.addAction("Sending Request to LLM", o.ActionCallFunc)
+		response, err = llmclient.GenerateContent(ctx,
+			msgs,
+			calloptions...,
+		)
+	}
+
 	result.addAction("Finished", o.ActionCallFunc)
 
 	memoryAddAllowed = memoryAddAllowed && o.SessionID != ""
 	if response != nil {
 
 		// Update memory with the new query if RAG data was found
-		if (hasRag||llm.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
+		if (hasRag || llm.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
 			queryData := MemoryData{
 				Question: Query,
 				Answer:   response.Choices[0].Content,
@@ -469,197 +538,4 @@ Assistant:`,
 		Actions:  result.Actions,
 	}
 	return result, err
-}
-
-// WithStreamingFunc specifies a callback function for handling streaming output during query processing.
-//
-// Parameters:
-//   - streamingFunc: A function to process streaming chunks of output from the LLM.
-//     Returning an error stops the streaming process.
-//
-// Returns:
-//   - LLMCallOption: An option to set the streaming function.
-func (llm *LLMContainer) WithStreamingFunc(streamingFunc func(ctx context.Context, chunk []byte) error) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.StreamingFunc = streamingFunc
-	}
-}
-
-// WithActionCallFunc specifies a callback function to log custom actions during LLM query processing.
-//
-// Parameters:
-//   - ActionCallFunc: A function defining custom actions to be logged during query processing.
-//
-// Returns:
-//   - LLMCallOption: An option to set the custom action callback function.
-func (llm *LLMContainer) WithActionCallFunc(ActionCallFunc func(action LLMAction)) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.ActionCallFunc = ActionCallFunc
-	}
-}
-
-// WithLanguage specifies the language to use for the query response.
-//
-// Parameters:
-//   - Language: The language in which the LLM should generate responses.
-//
-// Returns:
-//   - LLMCallOption: An option that sets the query language.
-func (llm *LLMContainer) WithLanguage(Language string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.Language = Language
-	}
-}
-
-// WithSessionID specifies the session ID for tracking user chat history and interactions.
-//
-// Parameters:
-//   - SessionID: A unique identifier for the user's session.
-//
-// Returns:
-//   - LLMCallOption: An option that sets the session ID.
-func (llm *LLMContainer) WithSessionID(SessionID string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.SessionID = SessionID
-	}
-}
-
-// WithEmbeddingPrefix specifies a prefix for identifying related embeddings.
-//
-// Parameters:
-//   - Prefix: A string prefix used to group or identify embeddings in the store.
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		if Prefix == "" {
-			Prefix = "default"
-		}
-		o.Prefix = Prefix
-	}
-}
-
-func (llm *LLMContainer) WithEmbeddingIndex(Index string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		if Index == "" {
-			Index = "default"
-		}
-		o.Index = Index
-	}
-}
-
-// SearchAll specifies the scope of search,
-//
-// Parameters:
-//   - language: scope of general search in specific language
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) SearchAll(language string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		// o.Prefix = "all:"+language
-		o.searchAllLanguage = language
-		o.searchAll = true
-	}
-}
-
-// WithExtraExtraContext specifies a extra context for search
-//
-// Parameters:
-//   - ExtraContext: Extra provided text to provide LLM.
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithExtraContext(ExtraContext string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.ExtraContext = ExtraContext
-	}
-}
-
-// WithExtraExactPromot queries LLM with exact promot.
-//
-// Parameters:
-//   - ExactPromot: string, prompt
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithExactPrompt(ExactPrompt string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.ExactPrompt = ExactPrompt
-	}
-}
-
-func (o *LLMCallOptions) getEmbeddingPrefix() string {
-	if o.Prefix == "" {
-		o.Prefix = "default"
-	}
-	return o.Prefix
-}
-
-// WithEmbeddingPrefix specifies a prefix for identifying related embeddings.
-//
-// Parameters:
-//   - Prefix: A string prefix used to group or identify embeddings in the store.
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithLimitGeneralEmbedding(denied bool) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.LimitGeneralEmbedding = denied
-	}
-}
-
-// WithCotextCleanup Cleanup retrieved context, specially html codes to make a clear context
-//
-// Parameters:
-//   - cleanup: A boolean value to update property
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithCotextCleanup(cleanup bool) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.CotextCleanup = cleanup
-	}
-}
-
-// WithPersistentMemory enhances the memory by using vector search to create more efficient prompts for conversation memory
-//
-// Parameters:
-//   - usePersistentMemory: A boolean value to update property
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithPersistentMemory(usePersistentMemory bool) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.PersistentMemory = usePersistentMemory
-	}
-}
-
-// WithPersistentMemory enhances the memory by using vector search to create more efficient prompts for conversation memory
-//
-// Parameters:
-//   - usePersistentMemory: A boolean value to update property
-//
-// Returns:
-//   - LLMCallOption: An option that sets the embedding prefix.
-func (llm *LLMContainer) WithCharacter(character string) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.character = character
-	}
-}
-
-
-
-// WithLanguage specifies the language to use for the query response.
-//
-// Parameters:
-//   - Language: The language in which the LLM should generate responses.
-//
-// Returns:
-//   - LLMCallOption: An option that sets the query language.
-func (llm *LLMContainer) WithMaxTokens(maxTokens int) LLMCallOption {
-	return func(o *LLMCallOptions) {
-		o.MaxTokens = maxTokens
-	}
 }
