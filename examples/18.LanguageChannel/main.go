@@ -66,6 +66,7 @@ func main() {
 	case <-time.After(3 * time.Minute):
 		fmt.Println("Timeout!")
 	}
+	close(ch)
 	w.Wait()
 }
 
