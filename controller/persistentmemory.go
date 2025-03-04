@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/tmc/langchaingo/schema"
 )
 
 // PersistentMemory structure to store user memory session data in a persistent storage (Redis) for future retrival or vector search.
@@ -114,14 +115,15 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 //   - MemoryData: Last asked question.
 //   - string: generated prompt for memory context.
 //   - error: An error if the memory retrival process fails.
-func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryData, string, error) {
+func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryData, string,[]schema.Document, error) {
 	result := ""
+	memoryhistory:=[]schema.Document{}
 	var err error
 	// Get last question from Memory
 	redisCmd := pm.redisClient.Get(context.TODO(), "rawMemory:"+pm.MemoryPrefix+":"+sessionID)
 	lastQuestion := MemoryData{}
 	if redisCmd.Err() != nil {
-		return lastQuestion, "", redisCmd.Err()
+		return lastQuestion, "",memoryhistory, redisCmd.Err()
 	}
 	curUserMemoryStr := redisCmd.Val()
 	curUserMemory := Memory{}
@@ -138,12 +140,13 @@ func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryDat
 
 			for _, doc := range resDocs {
 				result += doc.PageContent
+				memoryhistory=append(memoryhistory, doc)
 			}
 
 		}
 		result += "User: " + lastQuestion.Question + "\nAssistant:" + lastQuestion.Answer + "\n"
 	}
-	return lastQuestion, result, err
+	return lastQuestion, result,memoryhistory, err
 }
 
 // DeleteMemory removes a user's session memory from the memory map.

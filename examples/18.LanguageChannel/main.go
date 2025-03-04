@@ -56,6 +56,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		close(ch)
 
 		w.Done()
 	}()
@@ -63,10 +64,9 @@ func main() {
 	select {
 	case msg := <-ch:
 		fmt.Println("\nLanguage:", msg)
-	case <-time.After(3 * time.Minute):
+	case <-time.After(1 * time.Second):
 		fmt.Println("Timeout!")
 	}
-	close(ch)
 	w.Wait()
 }
 

@@ -157,6 +157,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	KNNMemoryStr := ""
 	exists := false
 	var memoryData []MemoryData
+	var persistentMemoryHistory []schema.Document
 	if o.SessionID != "" {
 
 		if !o.PersistentMemory {
@@ -170,7 +171,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		} else {
 			// gget memory data:
 			lastQuery := MemoryData{}
-			lastQuery, memoryStr, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
+			lastQuery, memoryStr,persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
 			KNNMemoryStr += lastQuery.Question + " " + lastQuery.Answer
 		}
 	}
@@ -301,11 +302,11 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 
 				if len(langResponse.Choices) > 0 {
 					llm.userLanguage[o.SessionID] = langResponse.Choices[0].Content
-					if o.LanguageChannel!=nil{
-						go func(){
-							o.LanguageChannel <- llm.userLanguage[o.SessionID]	
+					if o.LanguageChannel != nil {
+						go func() {
+							o.LanguageChannel <- llm.userLanguage[o.SessionID]
 						}()
-						
+
 					}
 				}
 				if langErr != nil || llm.userLanguage[o.SessionID] == "" {
@@ -320,6 +321,12 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			} else {
 				languageCapabilityDetectionFunction = ""
 				languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
+				if o.LanguageChannel != nil {
+					go func() {
+						o.LanguageChannel <- llm.userLanguage[o.SessionID]
+					}()
+
+				}
 
 			}
 
@@ -530,6 +537,14 @@ Assistant:`,
 			}
 		}
 	}
+	if o.PersistentMemory{
+		for _,memdoc:= range persistentMemoryHistory{
+			// page memdoc.PageContent
+			memoryData = append(memoryData, extractMemoryData(memdoc.PageContent))
+			// memoryData.Keys = append(memoryData.Keys, memdoc.Metadata["keys"])
+			
+		}
+	}
 	result = LLMResult{
 		Prompt:   msgs,
 		Response: response,
@@ -538,4 +553,30 @@ Assistant:`,
 		Actions:  result.Actions,
 	}
 	return result, err
+}
+
+
+func extractMemoryData(input string) MemoryData {
+	// Variable to store memory data
+	var memoryData MemoryData
+
+	// Split the input string based on "Assistant:"
+	parts := strings.Split(input, "Assistant:")
+	if len(parts) < 2 {
+		return memoryData // Return empty if the input string doesn't have the expected structure
+	}
+
+	// Extract the part after "User:" and store it in Question
+	userPart := strings.TrimSpace(parts[0])
+	memoryData.Question = strings.TrimPrefix(userPart, "User:")
+
+	// Extract the part after "Assistant:" and store it in Answer
+	assistantPart := strings.TrimSpace(parts[1])
+	memoryData.Answer = assistantPart
+
+	// Here, you can add logic to extract Keys or any other data
+	// For example, let's assume we extract Keys based on new lines
+	memoryData.Keys = strings.Split(assistantPart, "\n")
+
+	return memoryData
 }
