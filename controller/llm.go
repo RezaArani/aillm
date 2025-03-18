@@ -50,12 +50,13 @@ func (llm *LLMContainer) Init() error {
 	llm.MemoryManager = NewMemoryManager(300)
 	// Configure text embedding parameters with chunking settings
 
-	ec := EmbeddingConfig{
-		ChunkSize:    2048, // Size of each text chunk
-		ChunkOverlap: 100,  // Overlap between consecutive chunks for context retention
+	if llm.EmbeddingConfig.ChunkSize == 0 {
+		ec := EmbeddingConfig{
+			ChunkSize:    2048, // Size of each text chunk
+			ChunkOverlap: 100,  // Overlap between consecutive chunks for context retention
+		}
+		llm.EmbeddingConfig = ec
 	}
-
-	llm.EmbeddingConfig = ec
 
 	// Retrieve Tika service URL from environment variables for text processing
 
@@ -123,6 +124,74 @@ func (llm *LLMContainer) Init() error {
 	return err
 }
 
+// GetQueryLanguage Returns user query Language.
+//
+//
+// Parameters:
+//   - Query: The user's input query.
+//
+// Returns:
+//   - string: detected Language by LLM Model.
+//   - error: An error if the query fails or if essential components are missing.
+
+func (llm *LLMContainer) GetQueryLanguage(Query, sessionId string, languageChannel chan<- string) (string, error) {
+	llmclient, err := llm.LLMClient.NewLLMClient()
+	if err != nil {
+		return "", err
+	}
+	langResponse, langErr := llmclient.GenerateContent(context.TODO(),
+		[]llms.MessageContent{
+
+			llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without ".".`),
+		},
+		llms.WithTemperature(0))
+	if langErr != nil {
+		return "", langErr
+	}
+
+	return langResponse.Choices[0].Content, nil
+
+}
+func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, languageChannel chan<- string) (languageCapabilityDetectionFunction, languageCapabilityDetectionText string) {
+	if llm.userLanguage == nil {
+		llm.userLanguage = make(map[string]string)
+	}
+	if llm.userLanguage[SessionId] == "" {
+
+		userQueryLanguage, detectionError := llm.GetQueryLanguage(Query, SessionId, languageChannel)
+		if detectionError == nil {
+			llm.userLanguage[SessionId] = userQueryLanguage
+		}
+		if detectionError != nil || llm.userLanguage[SessionId] == "" {
+			//unable to detect language
+			languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
+			languageCapabilityDetectionText = "{language}"
+		} else {
+			// language detected, will be saved for the session.
+			languageCapabilityDetectionFunction = ""
+			languageCapabilityDetectionText = llm.userLanguage[SessionId]
+		}
+	} else {
+		languageCapabilityDetectionFunction = ""
+		languageCapabilityDetectionText = llm.userLanguage[SessionId]
+
+	}
+	if languageChannel != nil && SessionId != "" {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// ok = false
+					log.Printf("sending language to closed channel, panic recovered: %v\n", r)
+				}
+			}()
+			languageChannel <- llm.userLanguage[SessionId]
+		}()
+
+	}
+	return languageCapabilityDetectionFunction, languageCapabilityDetectionText
+
+}
+
 // AskLLM processes a user query and retrieves an AI-generated response using Retrieval-Augmented Generation (RAG).
 //
 // This function supports multi-step processes:
@@ -149,7 +218,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	for _, opt := range options {
 		opt(&o)
 	}
-	if o.Prefix == "" {
+	if o.Index == "" {
 		o.searchAll = true
 	}
 	result.addAction("Start Calling LLM", o.ActionCallFunc)
@@ -171,7 +240,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		} else {
 			// gget memory data:
 			lastQuery := MemoryData{}
-			lastQuery, memoryStr,persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
+			lastQuery, memoryStr, persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
 			KNNMemoryStr += lastQuery.Question + " " + lastQuery.Answer
 		}
 	}
@@ -180,7 +249,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	llmclient, err := llm.LLMClient.NewLLMClient()
 	var msgs []llms.MessageContent
 	hasRag := false
-	var resDocs interface{}
+	var resDocs []schema.Document
 
 	// check exact prompt provided or not
 	if o.ExactPrompt == "" {
@@ -211,17 +280,32 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, llm.Character))
 		}
 		// Construct the query prefix for the embedding store
-		KNNPrefix := "context:" + o.getEmbeddingPrefix() + ":"
+		KNNPrefix := "context:"
+		if o.getEmbeddingPrefix() != "" {
+			KNNPrefix += o.getEmbeddingPrefix() + ":"
+		}
+		if o.Index == ""  {
+			o.searchAll = true
+		}
 		if o.searchAll {
 			// o.Prefix =
-			KNNPrefix = "all:" + o.getEmbeddingPrefix() + ":" + o.searchAllLanguage + ":"
+			KNNPrefix = "all:"
+			if o.getEmbeddingPrefix() != "" {
+				KNNPrefix += o.getEmbeddingPrefix() + ":"
+			}
+			if o.Language != "" {
+				KNNPrefix += o.Language + ":"
+			}
 		} else {
+			KNNPrefix += o.Index + ":"
 			if o.Language == "" {
 				if llm.FallbackLanguage != "" {
 					o.Language = llm.FallbackLanguage
 				}
 			}
-			KNNPrefix += o.Index + ":" + o.Language + ":"
+			if o.Language != "" {
+				KNNPrefix += o.Language + ":"
+			}
 		}
 		KNNQuery := Query
 
@@ -252,7 +336,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			}
 		}
 		// Check if relevant documents were retrieved
-		hasRag = (resDocs != nil && len(resDocs.([]schema.Document)) > 0) || o.ExtraContext != ""
+		hasRag = (resDocs != nil && len(resDocs) > 0) || o.ExtraContext != ""
 
 		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
 			searchPrefix := o.getEmbeddingPrefix() + ":" + llm.FallbackLanguage + ":"
@@ -276,7 +360,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 					return result, KNNGetErr
 				}
 			}
-			hasRag = resDocs != nil && len(resDocs.([]schema.Document)) > 0
+			hasRag = resDocs != nil && len(resDocs) > 0
 
 		}
 		result.addAction("Prompt Generation Start", o.ActionCallFunc)
@@ -289,47 +373,36 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
 		languageCapabilityDetectionText := `detected language without mentioning it.`
 		if llm.LLMModelLanguageDetectionCapability {
-			if llm.userLanguage == nil {
-				llm.userLanguage = make(map[string]string)
-			}
-			if llm.userLanguage[o.SessionID] == "" {
-				langResponse, langErr := llmclient.GenerateContent(ctx,
-					[]llms.MessageContent{
+			// if llm.userLanguage == nil {
+			// 	llm.userLanguage = make(map[string]string)
+			// }
+			// if llm.userLanguage[o.SessionID] == "" {
 
-						llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without ".".`),
-					},
-					llms.WithTemperature(0))
+			// 	userQueryLanguage, detectionError := llm.GetQueryLanguage(Query,o.SessionID,o.LanguageChannel)
+			// 	if detectionError == nil{
+			// 		llm.userLanguage[o.SessionID] = userQueryLanguage
+			// 	}
+			// 	if detectionError != nil || llm.userLanguage[o.SessionID] == "" {
+			// 		//unable to detect language
+			// 		languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
+			// 		languageCapabilityDetectionText = "{language}"
+			// 	} else {
+			// 		// language detected, will be saved for the session.
+			// 		languageCapabilityDetectionFunction = ""
+			// 		languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
+			// 	}
+			// } else {
+			// 	languageCapabilityDetectionFunction = ""
+			// 	languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
+			// 	if o.LanguageChannel != nil {
+			// 		go func() {
+			// 			o.LanguageChannel <- llm.userLanguage[o.SessionID]
+			// 		}()
 
-				if len(langResponse.Choices) > 0 {
-					llm.userLanguage[o.SessionID] = langResponse.Choices[0].Content
-					if o.LanguageChannel != nil {
-						go func() {
-							o.LanguageChannel <- llm.userLanguage[o.SessionID]
-						}()
+			// 	}
 
-					}
-				}
-				if langErr != nil || llm.userLanguage[o.SessionID] == "" {
-					//unable to detect language
-					languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
-					languageCapabilityDetectionText = "{language}"
-				} else {
-					// language detected, will be saved for the session.
-					languageCapabilityDetectionFunction = ""
-					languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
-				}
-			} else {
-				languageCapabilityDetectionFunction = ""
-				languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
-				if o.LanguageChannel != nil {
-					go func() {
-						o.LanguageChannel <- llm.userLanguage[o.SessionID]
-					}()
-
-				}
-
-			}
-
+			// }
+			languageCapabilityDetectionFunction, languageCapabilityDetectionText = llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
 		} else {
 			if llm.AnswerLanguage != "" {
 				languageCapabilityDetectionFunction = ""
@@ -369,7 +442,7 @@ Assistant:`,
 				}
 			}
 		} else {
-			for idx, doc := range resDocs.([]schema.Document) {
+			for idx, doc := range resDocs {
 				if idx > 0 {
 					ragText += "\n"
 				}
@@ -419,6 +492,14 @@ Assistant:`,
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
 		memoryAddAllowed = hasRag || llm.AllowHallucinate
 	} else {
+		if o.ForceLanguage {
+			_, Language := llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
+			if Language != "" {
+				msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, "Reply in "+Language))
+			}
+
+		}
+
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, o.ExactPrompt))
 	}
 	isFirstWord := true
@@ -537,12 +618,12 @@ Assistant:`,
 			}
 		}
 	}
-	if o.PersistentMemory{
-		for _,memdoc:= range persistentMemoryHistory{
+	if o.PersistentMemory {
+		for _, memdoc := range persistentMemoryHistory {
 			// page memdoc.PageContent
 			memoryData = append(memoryData, extractMemoryData(memdoc.PageContent))
 			// memoryData.Keys = append(memoryData.Keys, memdoc.Metadata["keys"])
-			
+
 		}
 	}
 	result = LLMResult{
@@ -554,7 +635,6 @@ Assistant:`,
 	}
 	return result, err
 }
-
 
 func extractMemoryData(input string) MemoryData {
 	// Variable to store memory data

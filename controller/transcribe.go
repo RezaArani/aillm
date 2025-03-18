@@ -118,7 +118,7 @@ func (Ts *Transcriber) init() error {
 //   - string: Extracted text content.
 //   - int: Number of pages processed (if applicable).
 //   - error: An error if the transcription fails.
-func (Ts *Transcriber) transcribeURL(inputURL string, tc TranscribeConfig) (string, int, error) {
+func (Ts *Transcriber) TranscribeURL(inputURL string, tc TranscribeConfig) (string, int, error) {
 	Ts.init()
 	log.Println("Downloading " + inputURL + "...")
 	fileContents, mimeType, fileName, _, fetchErr := Ts.downloadPage(inputURL)
@@ -290,7 +290,7 @@ func (Ts *Transcriber) getContentsFromTika(tc TranscribeConfig, inputPath string
 	buf := new(strings.Builder)
 	io.Copy(buf, ioReadCloser)
 	result := buf.String()
-	result = Ts.cleanupText(result)
+	result = Ts.cleanupText(result,false)
 	return result, pageCount, nil
 }
 
@@ -341,7 +341,10 @@ func (Ts *Transcriber) getPDFContents(tc TranscribeConfig, inputPath string) (st
 //
 // Returns:
 //   - string: The cleaned-up text content.
-func (Ts *Transcriber) cleanupText(textContent string) string {
+func (Ts *Transcriber) cleanupText(textContent string, isHtml bool) string {
+	if isHtml && strings.Contains(textContent, "<") {
+		textContent = Ts.extractHTMLContent([]byte(textContent))
+	}
 	textContent = strings.ReplaceAll(textContent, "\t", "")
 	hasEnter := true
 	for hasEnter {
@@ -466,7 +469,7 @@ func (Ts Transcriber) extractHTMLContent(htmlBytes []byte) string {
 //   - string: Cleaned-up text content.
 func (Ts Transcriber) extractTextContent(fileBytes []byte) string {
 	// Create a reader from the byte slice
-	return Ts.cleanupText(string(fileBytes))
+	return Ts.cleanupText(string(fileBytes),false)
 }
 
 // downloadRemoteFileWithMimeType downloads a file from the provided URL and determines its MIME type.

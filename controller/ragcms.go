@@ -17,9 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/tmc/langchaingo/schema"
 )
 
 // LLMEmbeddingContent represents a single piece of text content that is embedded and stored in the system.
@@ -34,13 +36,13 @@ import (
 //   - Source: The origin of the content, such as a file name, URL, or other identifier.
 //   - Keys: A slice of strings representing the Redis keys associated with this content.
 type LLMEmbeddingContent struct {
-	Text        string `json:"Text" redis:"Text"`
-	Title       string `json:"Title" redis:"Title"`
-	Language    string `json:"Language" redis:"Language"`
-	Id          string `json:"Id" redis:"Id"`
-	Source      string `json:"Source" redis:"Source"`
-	Keys        []string
-	GeneralKeys []string
+	Text        string   `json:"Text" redis:"Text"`
+	Title       string   `json:"Title" redis:"Title"`
+	Language    string   `json:"Language" redis:"Language"`
+	Id          string   `json:"Id" redis:"Id"`
+	Source      string   `json:"Source" redis:"Source"`
+	Keys        []string `json:"Keys" redis:"Keys"`
+	GeneralKeys []string `json:"GeneralKeys" redis:"GeneralKeys"`
 }
 
 // LLMEmbeddingObject represents a collection of embedded text contents grouped under a specific object ID.
@@ -66,7 +68,12 @@ type LLMEmbeddingObject struct {
 //   - A string representing the Redis key in the format "rawDocs:ObjectId:Index".
 func (llmeo LLMEmbeddingObject) getRawDocRedisId() string {
 	// Construct Redis key using object ID and sanitized Index
-	return "rawDocs:" + llmeo.EmbeddingPrefix + ":" + llmeo.sanitizeRedisKey(llmeo.Index)
+	key := "rawDocs:"
+	if llmeo.EmbeddingPrefix != "" {
+		key += llmeo.EmbeddingPrefix + ":"
+	}
+	key += llmeo.sanitizeRedisKey(llmeo.Index)
+	return key
 }
 
 // EmbeddFile processes and embeds the content of a given file into the LLM system.
@@ -121,7 +128,7 @@ func (llm LLMContainer) EmbeddURL(Index, url string, tc TranscribeConfig, option
 
 	var result LLMEmbeddingObject
 	// Transcribe the content from the provided URL
-	fileContents, _, transcribeErr := llm.Transcriber.transcribeURL(url, tc)
+	fileContents, _, transcribeErr := llm.Transcriber.TranscribeURL(url, tc)
 	if transcribeErr != nil {
 		return result, transcribeErr
 	}
@@ -166,6 +173,7 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 		Index:           Index,
 	}
 
+
 	// Load existing data from Redis if available
 	result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
 
@@ -177,7 +185,13 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 		Contents.Id = uuid.New().String()
 	}
 	//
-	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text), Contents.Source, o.LimitGeneralEmbedding, false)
+	if o.CotextCleanup {
+		Contents.Text = llm.Transcriber.cleanupText(Contents.Text, true)
+	}
+	if Contents.Language == "" {
+		Contents.Language = o.Language
+	}
+	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text, o.CotextCleanup), Contents.Source, o.LimitGeneralEmbedding, false)
 	if err != nil {
 		return result, err
 	}
@@ -218,18 +232,26 @@ func (llmEO *LLMEmbeddingObject) load(client *redis.Client, KeyID string) error 
 	ctx := context.Background()
 
 	// Retrieve data from Redis using the provided key
-	data, err := client.Get(ctx, KeyID).Result()
+	data, err := client.Do(ctx, "JSON.GET",  KeyID).Result()
+
 	if err == redis.Nil {
 		return fmt.Errorf("key not found")
 	} else if err != nil {
 		return err
 	}
 
-	// Unmarshal JSON data into the LLMEmbeddingObject structure
-	err = json.Unmarshal([]byte(data), llmEO)
-	if err != nil {
-		return err
+	jsonData, ok := data.(string)
+	if !ok {
+		return fmt.Errorf("data is not a LLMEmbeddingObject")
+	}else{
+		err = json.Unmarshal([]byte(jsonData), llmEO)
+		if err != nil {
+			return err
+		}
 	}
+
+	// Unmarshal JSON data into the LLMEmbeddingObject structure
+	
 
 	return nil
 }
@@ -253,7 +275,8 @@ func (llmEO LLMEmbeddingObject) delete(rdb *redis.Client, KeyID string) error {
 		return err
 	}
 	// Delete the specified key from Redis
-	_, err = rdb.Del(ctx, KeyID).Result()
+	// _, err = rdb.Del(ctx, KeyID).Result()
+	err = deleteKey(ctx,rdb, KeyID,llmEO.EmbeddingPrefix)
 	if err != nil {
 		return err
 	}
@@ -270,7 +293,15 @@ func (llmEO LLMEmbeddingObject) delete(rdb *redis.Client, KeyID string) error {
 //   - error: An error if the save operation fails.
 func (llmEO *LLMEmbeddingObject) save(rdb *redis.Client, KeyID string) error {
 	ctx := context.TODO()
-
+	// Check Redis connection before proceeding
+	_, err := rdb.Ping(ctx).Result()
+	if err != nil {
+		return err
+	}
+	err = createIndex(ctx, rdb, llmEO.EmbeddingPrefix)
+	if err != nil {
+		return err
+	}
 	// Delete any existing record before saving a new one
 	llmEO.delete(rdb, llmEO.getRawDocRedisId())
 	// Serialize the embedding object to JSON format
@@ -278,19 +309,10 @@ func (llmEO *LLMEmbeddingObject) save(rdb *redis.Client, KeyID string) error {
 	if err != nil {
 		return err
 	}
-	// Check Redis connection before proceeding
-	_, err = rdb.Ping(ctx).Result()
-	if err != nil {
-		return err
-	}
 	// Store the serialized data in Redis with no expiration
-	err = rdb.Del(ctx, KeyID).Err()
+	err = saveKey(ctx, rdb, KeyID, data)
 	if err != nil {
-		return err
-	}
-	err = rdb.Set(ctx, KeyID, data, 0).Err()
-	if err != nil {
-		return err
+		return fmt.Errorf("error setting JSON in Redis: %v", err)
 	}
 	return nil
 }
@@ -441,4 +463,90 @@ func (llm *LLMContainer) RemoveEmbeddingSubKey(Index, rawDocID string, options .
 		return llmo.save(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
 
 	}
+}
+
+// GetRagIndexs retrieves the Redis index values for the given documents.
+//
+// Parameters:
+//   - docs: A slice of schema.Document objects containing the documents to search for.
+//   - options: Additional options for the search operation.
+//
+// Returns:
+//   - []string: A slice of Redis index values.
+//   - error: An error if the operation fails.
+func (llm *LLMContainer) GetRagIndexs(docs []schema.Document, options ...LLMCallOption) ([]string, error) {
+	o := LLMCallOptions{}
+	for _, opt := range options {
+		opt(&o)
+	}
+	if len(docs) == 0 {
+		return []string{},nil
+	}
+	
+	indexName := "rawDocsIdx:" 
+	if o.Prefix != "" {
+		indexName+= o.Prefix
+	}
+
+	rdb := llm.RedisClient.redisClient
+	ctx := context.TODO()
+
+
+	var escapedQueries []string
+	for _, value := range docs {
+		escapedValue := escapeRedisQuery(value.Metadata["id"].(string))
+		query := fmt.Sprintf(`(@GeneralKeys:{%s}) | (@Keys:{%s})`, escapedValue, escapedValue)
+		escapedQueries = append(escapedQueries, query)
+	}
+	finalQuery := strings.Join(escapedQueries, " | ") // ترکیب همه کوئری‌ها با عملگر `OR`
+	results, err := rdb.Do(ctx, "FT.SEARCH", indexName, finalQuery, "RETURN", "1", "$.Index").Result()
+	if err != nil {
+		return nil, err
+	}
+	// Extract "index" values from the search results
+	var indexValues []string
+
+	// پردازش خروجی FT.SEARCH
+	resultsArray, ok := results.(map[interface {}]interface {})
+	if !ok || (len(resultsArray) < 2 && len(docs)>0){ // نتایج باید حداقل شامل header و یک نتیجه باشند
+		return nil, fmt.Errorf("no results found")
+	}
+
+	// پیمایش داده‌های استخراج شده
+	for _,item:= range resultsArray{
+		indexData, ok := item.([]interface {})
+		if !ok || len(indexData)<1 {
+			continue
+		}
+		for _,indexResults:= range indexData{
+			idxContents,ok := indexResults.(map[interface {}]interface {})
+			if ok {
+				for _,indexItem:= range idxContents{
+					indexItemData, ok := indexItem.(string)
+					if ok && strings.HasPrefix(indexItemData, "rawDocs:") {
+						indexValues = append(indexValues, indexItemData[8:])
+						continue
+					}
+				}
+			}
+		}
+	}
+
+	return indexValues, nil
+
+}
+
+// escapeRedisQuery escapes special characters in a string to be used in Redis queries.
+//
+// Parameters:
+//   - value: The string to be escaped.
+//
+// Returns:
+//   - string: The escaped string.
+func escapeRedisQuery(value string) string {
+	specialChars := []string{"-", ":"}
+	for _, char := range specialChars {
+		value = strings.ReplaceAll(value, char, `\`+char)
+	}
+	return value
 }

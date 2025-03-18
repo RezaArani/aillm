@@ -19,15 +19,15 @@ func main() {
 
 	embeddingllmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
-			Apiurl:  "http://127.0.0.1:11434",
-			AiModel: "all-minilm",
+			Apiurl:  "http://164.68.110.39:11434",
+			AiModel: "mxbai-embed-large",
 		},
 	}
 
 	llmclient := &aillm.OpenAIController{
 		Config: aillm.LLMConfig{
-			Apiurl:   "https://llama-3-1-70b-instruct.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
-			AiModel:  "Meta-Llama-3_1-70B-Instruct",
+			Apiurl:   "https://llama-3-3-70b-instruct.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1/",
+			AiModel:  "Meta-Llama-3_3-70B-Instruct",
 			APIToken: os.Getenv("APITOKEN"),
 		},
 	}
@@ -39,45 +39,42 @@ func main() {
 		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
+		ScoreThreshold: 0.99,
 	}
 	llm.Init()
 	// let's embed some data
 	log.Println("Embedding:")
 	embedd(llm)
 	// Distance to the result. greater means more R data but not accurate
-	askKLLM(llm, "SemMapas city and clients?")
-
-	// Cleanup
-	llm.RemoveEmbedding("SemMapas")
-
-}
-
-func askKLLM(llm aillm.LLMContainer, query string) {
-	log.Println("LLM Reply to " + query + ":")
-	queryResult, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
-	response := queryResult.Response
-	resDocs := queryResult.RagDocs
+	queryResult, err := llm.AskLLM("SemMapas city and clients?", llm.WithStreamingFunc(print))
+	
 	if err != nil {
 		panic(err)
 	}
-	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
-	log.Println("PromptTokens: ", response.Choices[0].GenerationInfo["PromptTokens"])
-	log.Println("TotalTokens: ", response.Choices[0].GenerationInfo["TotalTokens"])
-	log.Println("Reference Documents: ", len(resDocs))
-
-	for idx, doc := range resDocs {
-		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
-		log.Println(srcDocs)
+	refrences, err := llm.GetRagIndexs(queryResult.RagDocs)
+	
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("\nRefrences:")
+	for _idx, refrence := range refrences {
+		fmt.Println("\t",_idx+1, refrence)
 	}
 
-}
+	// Cleanup
+	llm.RemoveEmbedding("MyData")
 
+}
+ 
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
 	contents := aillm.LLMEmbeddingContent{
 		Text: SemMapas,
 	}
-	llm.EmbeddText("SemMapas", contents)
+	_, err := llm.EmbeddText("MyData", contents)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func print(ctx context.Context, chunk []byte) error {

@@ -7,7 +7,6 @@ import (
 	"os"
 
 	aillm "github.com/RezaArani/aillm/controller"
-	"github.com/tmc/langchaingo/schema"
 )
 
 func main() {
@@ -84,9 +83,9 @@ func askKLLM(llm aillm.LLMContainer, query string) {
 	log.Println("CompletionTokens: ", response.Choices[0].GenerationInfo["CompletionTokens"])
 	log.Println("PromptTokens: ", response.Choices[0].GenerationInfo["PromptTokens"])
 	log.Println("TotalTokens: ", response.Choices[0].GenerationInfo["TotalTokens"])
-	log.Println("Reference Documents: ", len(resDocs.([]schema.Document)))
+	log.Println("Reference Documents: ", len(resDocs))
 
-	for idx, doc := range resDocs.([]schema.Document) {
+	for idx, doc := range resDocs {
 		srcDocs := fmt.Sprintf("\t%v. Score: %v,\tSource: %s+...", idx+1, doc.Score, doc.PageContent[:50])
 		log.Println(srcDocs)
 	}

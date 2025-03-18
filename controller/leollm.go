@@ -20,6 +20,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/schema"
 )
 
 // LLMConfig struct holds configuration details for the embedding and AI model service.
@@ -52,7 +53,7 @@ type LLMConfig struct {
 //   - Actions: A slice of LLMAction structs, each representing a logged action or milestone during the query lifecycle.
 type LLMResult struct {
 	Prompt   []llms.MessageContent
-	RagDocs  interface{}
+	RagDocs  []schema.Document
 	Response *llms.ContentResponse
 	Memory   []MemoryData
 	Actions  []LLMAction
@@ -91,6 +92,7 @@ type LLMCallOptions struct {
 	PersistentMemory      bool
 	MaxTokens             int
 	LanguageChannel       chan<- string
+	ForceLanguage         bool
 	Tools                 AillmTools
 }
 

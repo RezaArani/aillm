@@ -52,6 +52,7 @@ func main() {
 			"سلام. چطوری؟",
 			llm.WithLanguageChannel(ch),
 			llm.WithStreamingFunc(print),
+			llm.WithSessionID("fa"), // it is important to set the session id
 		)
 		if err != nil {
 			panic(err)
@@ -64,7 +65,7 @@ func main() {
 	select {
 	case msg := <-ch:
 		fmt.Println("\nLanguage:", msg)
-	case <-time.After(1 * time.Second):
+	case <-time.After(5 * time.Second):
 		fmt.Println("Timeout!")
 	}
 	w.Wait()

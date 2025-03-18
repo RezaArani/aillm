@@ -155,7 +155,12 @@ func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryDat
 //   - sessionID: The unique identifier for the session to be deleted.
 func (pm *PersistentMemory) DeleteMemory(sessionID string) error {
 	// llm.userLanguage[o.SessionID]
-	pm.lLMContainer.userLanguage[sessionID]=""
+	if sessionID==""{
+		return nil
+	}
+	if pm.lLMContainer.userLanguage!=nil{
+		pm.lLMContainer.userLanguage[sessionID]=""
+	}
 	keyPrefix := "rawMemory:" + pm.MemoryPrefix + ":" + sessionID
 	redisCmd := pm.redisClient.Get(context.TODO(), keyPrefix)
 	redisCmdErr := redisCmd.Err()

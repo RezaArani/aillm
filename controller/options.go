@@ -77,18 +77,18 @@ func (llm *LLMContainer) WithSessionID(SessionID string) LLMCallOption {
 //   - LLMCallOption: An option that sets the embedding prefix.
 func (llm *LLMContainer) WithEmbeddingPrefix(Prefix string) LLMCallOption {
 	return func(o *LLMCallOptions) {
-		if Prefix == "" {
-			Prefix = "default"
-		}
+		// if Prefix == "" {
+		// 	Prefix = "default"
+		// }
 		o.Prefix = Prefix
 	}
 }
 
 func (llm *LLMContainer) WithEmbeddingIndex(Index string) LLMCallOption {
 	return func(o *LLMCallOptions) {
-		if Index == "" {
-			Index = "default"
-		}
+		// if Index == "" {
+		// 	Index = "default"
+		// }
 		o.Index = Index
 	}
 }
@@ -103,7 +103,7 @@ func (llm *LLMContainer) WithEmbeddingIndex(Index string) LLMCallOption {
 func (llm *LLMContainer) SearchAll(language string) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		// o.Prefix = "all:"+language
-		o.searchAllLanguage = language
+		o.Language = language
 		o.searchAll = true
 	}
 }
@@ -135,9 +135,9 @@ func (llm *LLMContainer) WithExactPrompt(ExactPrompt string) LLMCallOption {
 }
 
 func (o *LLMCallOptions) getEmbeddingPrefix() string {
-	if o.Prefix == "" {
-		o.Prefix = "default"
-	}
+	// if o.Prefix == "" {
+	// 	o.Prefix = "default"
+	// }
 	return o.Prefix
 }
 
@@ -211,7 +211,7 @@ func (llm *LLMContainer) WithMaxTokens(maxTokens int) LLMCallOption {
 // WithLanguageChannel returns user language and send it to main thread
 //
 // Parameters:
-//   - Language: The language in which the LLM should generate responses.
+//   - userChannel: AILLM will send language to selected channel for post processing.
 //
 // Returns:
 //   - LLMCallOption: An option that sets the query language.
@@ -221,6 +221,21 @@ func (llm *LLMContainer) WithLanguageChannel(userChannel chan string) LLMCallOpt
 	}
 }
 
+
+// WithForcedLanguage Forces ExactPrompt output language
+//
+// Parameters:
+//   - Language: The language in which the LLM should generate responses.
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithForcedLanguage(forceUserLanguage bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.ForceLanguage = forceUserLanguage 
+	}
+}
+
+// Experimental
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		o.Tools = tools
