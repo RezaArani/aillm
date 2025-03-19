@@ -67,9 +67,9 @@ func deleteKey(ctx context.Context, rdb *redis.Client, KeyID, indexName string) 
 // Returns:
 //   - error: An error if the operation fails.
 func createIndex(ctx context.Context, rdb *redis.Client, prefix string) error {
-	indexName:= "rawDocsIdx:"
+	indexName:= "rawDocsIdx"
 	if prefix!=""{
-		indexName+=prefix+":"
+		indexName+=":"+prefix
 	}
 	_, err := rdb.Do(ctx, "FT.INFO", indexName).Result()
 	if err != nil {

@@ -480,17 +480,16 @@ func (llm *LLMContainer) GetRagIndexs(docs []schema.Document, options ...LLMCall
 		opt(&o)
 	}
 	if len(docs) == 0 {
-		return []string{},nil
+		return []string{}, nil
 	}
-	
-	indexName := "rawDocsIdx:" 
+
+	indexName := "rawDocsIdx:"
 	if o.Prefix != "" {
-		indexName+= o.Prefix
+		indexName += o.Prefix
 	}
 
 	rdb := llm.RedisClient.redisClient
 	ctx := context.TODO()
-
 
 	var escapedQueries []string
 	for _, value := range docs {
@@ -507,33 +506,56 @@ func (llm *LLMContainer) GetRagIndexs(docs []schema.Document, options ...LLMCall
 	var indexValues []string
 
 	// پردازش خروجی FT.SEARCH
-	resultsArray, ok := results.(map[interface {}]interface {})
-	if !ok || (len(resultsArray) < 2 && len(docs)>0){ // نتایج باید حداقل شامل header و یک نتیجه باشند
-		return nil, fmt.Errorf("no results found")
-	}
+	resultsArray, ok := results.(map[interface{}]interface{})
+	if !ok || (len(resultsArray) < 2 && len(docs) > 0) {
+		// نتایج باید حداقل شامل header و یک نتیجه باشند
 
-	// پیمایش داده‌های استخراج شده
-	for _,item:= range resultsArray{
-		indexData, ok := item.([]interface {})
-		if !ok || len(indexData)<1 {
-			continue
-		}
-		for _,indexResults:= range indexData{
-			idxContents,ok := indexResults.(map[interface {}]interface {})
-			if ok {
-				for _,indexItem:= range idxContents{
+		//REDIS COMPATIBILITY
+		alternateResultsArray, ok := results.([]interface{})
+		if !ok || len(alternateResultsArray) < 2 {
+			return nil, fmt.Errorf("no results found")
+		} else {
+			// resultsArray = alternateResultsArray[1:]
+			for _, item := range alternateResultsArray {
+				indexData, ok := item.([]interface{})
+				if !ok || len(indexData) < 1 {
+					continue
+				}
+				for idx, indexItem := range indexData {
 					indexItemData, ok := indexItem.(string)
-					if ok && strings.HasPrefix(indexItemData, "rawDocs:") {
-						indexValues = append(indexValues, indexItemData[8:])
-						continue
+					if ok && indexItemData=="$.Index" {
+						indexValues = append(indexValues, indexData[idx+1].(string))
+						break
+					}
+				}
+			}
+
+		}
+
+	} else {
+		// پیمایش داده‌های استخراج شده
+		for _, item := range resultsArray {
+			indexData, ok := item.([]interface{})
+			if !ok || len(indexData) < 1 {
+				continue
+			}
+			for _, indexResults := range indexData {
+				idxContents, ok := indexResults.(map[interface{}]interface{})
+				if ok {
+					for _, indexItem := range idxContents {
+						indexItemData, ok := indexItem.(string)
+						if ok && strings.HasPrefix(indexItemData, "rawDocs:") {
+							finalIndex := strings.ReplaceAll(indexItemData, "rawDocs:"+o.Prefix+":", "")
+							indexValues = append(indexValues, finalIndex)
+							continue
+						}
 					}
 				}
 			}
 		}
+
 	}
-
 	return indexValues, nil
-
 }
 
 // escapeRedisQuery escapes special characters in a string to be used in Redis queries.
