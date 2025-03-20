@@ -144,7 +144,9 @@ Our project has been launched since 2023 in Portugal.
 
 ### 📢 Recent Updates  
 
-We have introduced a new feature that enables **image description using AI models** with just a few lines of code! 🎉 Now, you can effortlessly generate **detailed textual descriptions of images** by simply passing an image file and a text query to the model. The integration is seamless, requiring minimal setup while leveraging **powerful vision models** to analyze and interpret images. Check out the `DescribeImage` and `DescribeImageFromFile` functions to get started! 🚀
+* User Memory Summarization
+
+* We have introduced a new feature that enables **image description using AI models** with just a few lines of code! 🎉 Now, you can effortlessly generate **detailed textual descriptions of images** by simply passing an image file and a text query to the model. The integration is seamless, requiring minimal setup while leveraging **powerful vision models** to analyze and interpret images. Check out the `DescribeImage` and `DescribeImageFromFile` functions to get started! 🚀
 
 ## **License**
 This project is licensed under the **Apache License, Version 2.0**.

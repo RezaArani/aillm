@@ -87,12 +87,13 @@ type LLMCallOptions struct {
 	searchAll             bool
 	LimitGeneralEmbedding bool
 	CotextCleanup         bool
-	searchAllLanguage     string
+	// searchAllLanguage     string
 	character             string
 	PersistentMemory      bool
 	MaxTokens             int
 	LanguageChannel       chan<- string
 	ForceLanguage         bool
+	AllowHallucinate         bool
 	Tools                 AillmTools
 }
 

@@ -19,7 +19,7 @@ func main() {
 
 	embeddingllmclient := &aillm.OllamaController{
 		Config: aillm.LLMConfig{
-			Apiurl:  "http://164.68.110.39:11434",
+			Apiurl:  "http://127.0.0.1:11434",
 			AiModel: "mxbai-embed-large",
 		},
 	}

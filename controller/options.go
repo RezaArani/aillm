@@ -235,6 +235,21 @@ func (llm *LLMContainer) WithForcedLanguage(forceUserLanguage bool) LLMCallOptio
 	}
 }
 
+
+// WithAllowHallucinate allows model to hallucinate
+//
+// Parameters:
+//   - AllowHallucinate: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithAllowHallucinate(AllowHallucinate bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.AllowHallucinate = AllowHallucinate
+	}
+}
+
+
 // Experimental
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {

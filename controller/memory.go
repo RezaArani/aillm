@@ -28,8 +28,8 @@ import (
 type Memory struct {
 	Questions       []MemoryData // Stores user queries during the session
 	MemoryStartTime time.Time    // Timestamp when the session started
+	Summary         string       // Summary of the session
 }
-
 
 // Memory structure to store user memory question data.
 //

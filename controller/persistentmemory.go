@@ -51,7 +51,7 @@ func (llm *LLMContainer) initPersistentMemoryManager() {
 		MemoryTTL:             30 * time.Minute,
 		lLMContainer:          llm,
 		MemorySearchThreshold: llm.ScoreThreshold,
-		HistoryItemCount:      5,
+		HistoryItemCount:      1,
 	}
 	llm.PersistentMemoryManager = *persistentMemory
 
@@ -69,7 +69,7 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 
 	embeddingPrefix := pm.MemoryPrefix + ":" + sessionID + ":aillm_vector_idx"
 
-	promotPart := "User: " + query.Question + "\nAssistant: " + query.Answer
+	promotPart := "\nUser: " + query.Question + "\nAssistant: " + query.Answer + "\n"
 	keys, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "", true, true)
 	//
 	//Updating redis TTL
@@ -94,6 +94,21 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 
 	curUserMemory.Questions = append(curUserMemory.Questions, query)
 
+	if len(curUserMemory.Questions) >= 2 {
+		// curUserMemory.Summary = curUserMemory.Questions[len(curUserMemory.Questions)-1].Summary
+		PrevConversation := ""
+		for _, question := range curUserMemory.Questions {
+			if question.Answer[0] != '@' {
+				PrevConversation += "User: " + question.Question + "\nAssistant: " + question.Answer + "\n"
+			}
+		}
+		resp, err := pm.lLMContainer.AskLLM("", pm.lLMContainer.WithExactPrompt("You are a helpful assistant that summarizes conversations as short as possible with details for future use of LLM memory.\n"+PrevConversation),pm.lLMContainer.WithAllowHallucinate(true))
+		if err != nil {
+			return err
+		}
+		curUserMemory.Summary = resp.Response.Choices[0].Content
+	}
+
 	curUserMemoryBytes, err := json.Marshal(curUserMemory)
 	if err != nil {
 		return err
@@ -115,38 +130,42 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 //   - MemoryData: Last asked question.
 //   - string: generated prompt for memory context.
 //   - error: An error if the memory retrival process fails.
-func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryData, string,[]schema.Document, error) {
+func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryData, Memory, string, []schema.Document, error) {
 	result := ""
-	memoryhistory:=[]schema.Document{}
+	curUserMemory := Memory{}
+
+	memoryhistory := []schema.Document{}
 	var err error
 	// Get last question from Memory
 	redisCmd := pm.redisClient.Get(context.TODO(), "rawMemory:"+pm.MemoryPrefix+":"+sessionID)
 	lastQuestion := MemoryData{}
 	if redisCmd.Err() != nil {
-		return lastQuestion, "",memoryhistory, redisCmd.Err()
+		return lastQuestion, curUserMemory, "", memoryhistory, redisCmd.Err()
 	}
 	curUserMemoryStr := redisCmd.Val()
-	curUserMemory := Memory{}
 	_ = json.Unmarshal([]byte(curUserMemoryStr), &curUserMemory)
-
+	if curUserMemory.Summary != "" {
+		result = "Memory Summary: " + curUserMemory.Summary + "\n"
+	}
 	if len(curUserMemory.Questions) > 0 {
 		embeddingPrefix := "Memory:" + pm.MemoryPrefix + ":" + sessionID + ":"
 		lastQuestion = curUserMemory.Questions[len(curUserMemory.Questions)-1]
 		if len(curUserMemory.Questions) > 1 {
-			secondLastQuestion := curUserMemory.Questions[len(curUserMemory.Questions)-2]
-			result += "User: " + secondLastQuestion.Question + "\nAssistant:" + secondLastQuestion.Answer + "\n"
+			// secondLastQuestion := curUserMemory.Questions[len(curUserMemory.Questions)-2]
+			// result += "User: " + secondLastQuestion.Question + "\nAssistant:" + secondLastQuestion.Answer + "\n"
 			resDocs, searchErr := pm.lLMContainer.CosineSimilarity(embeddingPrefix, query, pm.HistoryItemCount, pm.MemorySearchThreshold)
 			err = searchErr
 
 			for _, doc := range resDocs {
 				result += doc.PageContent
-				memoryhistory=append(memoryhistory, doc)
+				memoryhistory = append(memoryhistory, doc)
 			}
 
 		}
+
 		result += "User: " + lastQuestion.Question + "\nAssistant:" + lastQuestion.Answer + "\n"
 	}
-	return lastQuestion, result,memoryhistory, err
+	return lastQuestion, curUserMemory, result, memoryhistory, err
 }
 
 // DeleteMemory removes a user's session memory from the memory map.
@@ -155,11 +174,11 @@ func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryDat
 //   - sessionID: The unique identifier for the session to be deleted.
 func (pm *PersistentMemory) DeleteMemory(sessionID string) error {
 	// llm.userLanguage[o.SessionID]
-	if sessionID==""{
+ 	if sessionID == "" {
 		return nil
 	}
-	if pm.lLMContainer.userLanguage!=nil{
-		pm.lLMContainer.userLanguage[sessionID]=""
+	if pm.lLMContainer.userLanguage != nil {
+		pm.lLMContainer.userLanguage[sessionID] = ""
 	}
 	keyPrefix := "rawMemory:" + pm.MemoryPrefix + ":" + sessionID
 	redisCmd := pm.redisClient.Get(context.TODO(), keyPrefix)

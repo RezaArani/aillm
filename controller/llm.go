@@ -224,6 +224,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	result.addAction("Start Calling LLM", o.ActionCallFunc)
 	memoryStr := ""
 	KNNMemoryStr := ""
+	MemorySummary := ""
 	exists := false
 	var memoryData []MemoryData
 	var persistentMemoryHistory []schema.Document
@@ -240,7 +241,9 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		} else {
 			// gget memory data:
 			lastQuery := MemoryData{}
-			lastQuery, memoryStr, persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
+			usermemory := Memory{}
+			lastQuery, usermemory, memoryStr, persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
+			MemorySummary = usermemory.Summary
 			KNNMemoryStr += lastQuery.Question + " " + lastQuery.Answer
 		}
 	}
@@ -284,7 +287,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		if o.getEmbeddingPrefix() != "" {
 			KNNPrefix += o.getEmbeddingPrefix() + ":"
 		}
-		if o.Index == ""  {
+		if o.Index == "" {
 			o.searchAll = true
 		}
 		if o.searchAll {
@@ -331,12 +334,12 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		}
 
 		if KNNGetErr != nil {
-			if !llm.AllowHallucinate {
+			if !llm.AllowHallucinate && !o.AllowHallucinate {
 				return result, KNNGetErr
 			}
 		}
 		// Check if relevant documents were retrieved
-		hasRag = (resDocs != nil && len(resDocs) > 0) || o.ExtraContext != ""
+		hasRag = len(resDocs) > 0
 
 		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
 			searchPrefix := o.getEmbeddingPrefix() + ":" + llm.FallbackLanguage + ":"
@@ -353,17 +356,14 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 				return result, errors.New("unknown search algorithm")
 			}
 
-			// resDocs, KNNGetErr := llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
-			// resDocs, KNNGetErr = llm.FindKNN(prefix+":"+llm.FallbackLanguage+":", Query, llm.RagRowCount, llm.ScoreThreshold)
 			if KNNGetErr != nil {
-				if !llm.AllowHallucinate {
+				if !llm.AllowHallucinate && !o.AllowHallucinate {
 					return result, KNNGetErr
 				}
 			}
-			hasRag = resDocs != nil && len(resDocs) > 0
-
 		}
 		result.addAction("Prompt Generation Start", o.ActionCallFunc)
+		hasRag = len(resDocs) > 0 || o.ExtraContext != ""
 
 		var curMessageContent llms.MessageContent
 		var ragArray []llms.ContentPart
@@ -373,35 +373,6 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
 		languageCapabilityDetectionText := `detected language without mentioning it.`
 		if llm.LLMModelLanguageDetectionCapability {
-			// if llm.userLanguage == nil {
-			// 	llm.userLanguage = make(map[string]string)
-			// }
-			// if llm.userLanguage[o.SessionID] == "" {
-
-			// 	userQueryLanguage, detectionError := llm.GetQueryLanguage(Query,o.SessionID,o.LanguageChannel)
-			// 	if detectionError == nil{
-			// 		llm.userLanguage[o.SessionID] = userQueryLanguage
-			// 	}
-			// 	if detectionError != nil || llm.userLanguage[o.SessionID] == "" {
-			// 		//unable to detect language
-			// 		languageCapabilityDetectionFunction = `{language} = detect_language("` + Query + `") without mentionning in response.`
-			// 		languageCapabilityDetectionText = "{language}"
-			// 	} else {
-			// 		// language detected, will be saved for the session.
-			// 		languageCapabilityDetectionFunction = ""
-			// 		languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
-			// 	}
-			// } else {
-			// 	languageCapabilityDetectionFunction = ""
-			// 	languageCapabilityDetectionText = llm.userLanguage[o.SessionID]
-			// 	if o.LanguageChannel != nil {
-			// 		go func() {
-			// 			o.LanguageChannel <- llm.userLanguage[o.SessionID]
-			// 		}()
-
-			// 	}
-
-			// }
 			languageCapabilityDetectionFunction, languageCapabilityDetectionText = llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
 		} else {
 			if llm.AnswerLanguage != "" {
@@ -413,7 +384,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		// If no relevant documents found, handle response accordingly
 
 		if !hasRag && o.ExtraContext == "" {
-			if !llm.AllowHallucinate {
+			if !llm.AllowHallucinate && !o.AllowHallucinate {
 				if llm.NoRagErrorMessage != "" {
 					ragText = languageCapabilityDetectionFunction + `You are an AI assistant, Think step-by-step before answer.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
@@ -426,6 +397,10 @@ Assistant:`
 			} else {
 				// allow hallucinate - reload memory
 				if memoryStr != "" {
+					if MemorySummary != "" {
+						memoryStr = MemorySummary + "\n" + memoryStr
+					}
+
 					memStrPrompt := "Here is the context from our previous interactions:\n" + memoryStr
 					ragText = fmt.Sprintf(`You are a %s AI assistant with knowledge:
 %s
@@ -490,7 +465,7 @@ Assistant:`,
 		}
 
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
-		memoryAddAllowed = hasRag || llm.AllowHallucinate
+		memoryAddAllowed = hasRag || llm.AllowHallucinate || o.AllowHallucinate
 	} else {
 		if o.ForceLanguage {
 			_, Language := llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
@@ -574,22 +549,30 @@ Assistant:`,
 			}
 		}
 
-		result.addAction("Sending Request to LLM", o.ActionCallFunc)
+		// response, err = llmclient.GenerateContent(ctx,
+		// 	msgs,
+		// 	calloptions...,
+		// )
+		// if err != nil {
+		// 	return result, err
+		// }
 
-		response, err = llmclient.GenerateContent(ctx,
-			msgs,
-			calloptions...,
-		)
-		if err != nil {
-			return result, err
-		}
+	}
+	// else {
+	// 	result.addAction("Sending Request to LLM", o.ActionCallFunc)
+	// 	response, err = llmclient.GenerateContent(ctx,
+	// 		msgs,
+	// 		calloptions...,
+	// 	)
+	// }
+	result.addAction("Sending Request to LLM", o.ActionCallFunc)
 
-	} else {
-		result.addAction("Sending Request to LLM", o.ActionCallFunc)
-		response, err = llmclient.GenerateContent(ctx,
-			msgs,
-			calloptions...,
-		)
+	response, err = llmclient.GenerateContent(ctx,
+		msgs,
+		calloptions...,
+	)
+	if err != nil {
+		return result, err
 	}
 
 	result.addAction("Finished", o.ActionCallFunc)
@@ -598,7 +581,7 @@ Assistant:`,
 	if response != nil {
 
 		// Update memory with the new query if RAG data was found
-		if (hasRag || llm.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
+		if (hasRag || llm.AllowHallucinate || o.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
 			queryData := MemoryData{
 				Question: Query,
 				Answer:   response.Choices[0].Content,

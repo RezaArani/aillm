@@ -143,7 +143,7 @@ func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LL
 	// Convert request to JSON
 	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return response, fmt.Errorf("Error converting request to JSON: %v\n", err)
+		return response, fmt.Errorf("error converting request to json: %v", err)
 	}
 
 	// Create context with timeout
@@ -153,7 +153,7 @@ func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LL
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		return response, fmt.Errorf("Error creating HTTP request: %v\n", err)
+		return response, fmt.Errorf("error creating http request: %v", err)
 	}
 
 	// Set HTTP headers
@@ -164,24 +164,24 @@ func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LL
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return response, fmt.Errorf("Error sending request: %v\n", err)
+		return response, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return response, fmt.Errorf("Error reading response: %v\n", err)
+		return response, fmt.Errorf("error reading response: %v", err)
 	}
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		return response, fmt.Errorf("API Error: Status code %d\nResponse: %s\n", resp.StatusCode, string(body))
+		return response, fmt.Errorf("api error: status code %d\nresponse: %s", resp.StatusCode, string(body))
 	}
 
 	// Convert JSON response to Go structure
 	if err := json.Unmarshal(body, &response); err != nil {
-		return response, fmt.Errorf("Error parsing JSON response: %v\n", err)
+		return response, fmt.Errorf("error parsing JSON response: %v", err)
 	}
 
 	// Display complete response
