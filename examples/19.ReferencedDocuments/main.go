@@ -39,7 +39,7 @@ func main() {
 		RedisClient: aillm.RedisClient{
 			Host: "localhost:6379",
 		},
-		ScoreThreshold: 0.99,
+		ScoreThreshold: 0.1,
 	}
 	llm.Init()
 	// let's embed some data
