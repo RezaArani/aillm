@@ -61,7 +61,7 @@ func (llm *LLMContainer) Init() error {
 	// Retrieve Tika service URL from environment variables for text processing
 
 	llm.Transcriber.TikaURL = os.Getenv("TikaURL")
-	if llm.Transcriber.TikaURL == "" {
+	if llm.Transcriber.TikaURL == "" && llm.ShowWarnings {
 		log.Println("Warning: Tika host configuration is missing. As a result, the transcriber will be restricted to processing only text and HTML files.")
 
 	}
@@ -142,7 +142,7 @@ func (llm *LLMContainer) GetQueryLanguage(Query, sessionId string, languageChann
 	langResponse, langErr := llmclient.GenerateContent(context.TODO(),
 		[]llms.MessageContent{
 
-			llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without ".".`),
+			llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without "." and just return "NONE" if you can't detect it.`),
 		},
 		llms.WithTemperature(0))
 	if langErr != nil {
@@ -159,7 +159,7 @@ func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, language
 	if llm.userLanguage[SessionId] == "" {
 
 		userQueryLanguage, detectionError := llm.GetQueryLanguage(Query, SessionId, languageChannel)
-		if detectionError == nil {
+		if detectionError == nil && userQueryLanguage != "NONE" {
 			llm.userLanguage[SessionId] = userQueryLanguage
 		}
 		if detectionError != nil || llm.userLanguage[SessionId] == "" {
@@ -244,7 +244,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			usermemory := Memory{}
 			lastQuery, usermemory, memoryStr, persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
 			MemorySummary = usermemory.Summary
-			KNNMemoryStr += lastQuery.Question + " " + lastQuery.Answer
+			KNNMemoryStr += lastQuery.Question 
 		}
 	}
 	ctx := context.Background()

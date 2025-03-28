@@ -15,7 +15,9 @@ package aillm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms/ollama"
@@ -113,7 +115,7 @@ func (llm *LLMContainer) InitEmbedding() error {
 //   - []string: A slice of keys representing the stored embeddings in the vector database.
 //   - int: The number of chunks the text was split into.
 //   - error: An error if the embedding process fails.
-func (llm *LLMContainer) embedText(prefix, language, index, title, contents, source string, GeneralEmbeddingDenied, rawKey bool) ([]string, []string, int, error) {
+func (llm *LLMContainer) embedText(prefix, language, index, title, contents string, sources string, metaData LLMEmbeddingContent, GeneralEmbeddingDenied, rawKey bool) ([]string, []string, int, error) {
 	var docList []string
 	var generalDocList []string
 	// Check if the embedding model is available
@@ -141,18 +143,23 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents, sou
 	}
 
 	// Add metadata to each chunk by prepending the source
-	if source != "" {
-		for idx, doc := range docs {
-			doc.PageContent = "source: " + source + "\n" + doc.PageContent
-			docs[idx] = doc
-		}
-	}
-	if title != "" {
-		for idx, doc := range docs {
+	for idx, doc := range docs {
+		// doc.PageContent = "source: " + source + "\n" + doc.PageContent
+		doc.Metadata = make(map[string]any)
+		metaData.Text = ""
+		jsonMeta, _ := json.Marshal(metaData)
+		doc.Metadata["rawkey"] = string(jsonMeta)
+		doc.Metadata["sources"] = sources
+		if title != "" {
 			doc.PageContent = "Title: " + title + "\n" + doc.PageContent
-			docs[idx] = doc
 		}
+		if len(metaData.Keywords) > 0 {
+			doc.PageContent = "Keywords: " + strings.Join(metaData.Keywords, ", ") + "\n" + doc.PageContent
+		}
+		docs[idx] = doc
 	}
+
+	
 
 	// Get the embedding model from the initialized client
 	embedder, err := llm.Embedder.NewEmbedder()

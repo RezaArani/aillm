@@ -70,7 +70,12 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 	embeddingPrefix := pm.MemoryPrefix + ":" + sessionID + ":aillm_vector_idx"
 
 	promotPart := "\nUser: " + query.Question + "\nAssistant: " + query.Answer + "\n"
-	keys, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "", true, true)
+	memoryembeddingContent := LLMEmbeddingContent{
+		Title: promotPart,
+		
+	}
+
+	keys, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "",memoryembeddingContent, true, true)
 	//
 	//Updating redis TTL
 

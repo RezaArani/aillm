@@ -40,9 +40,10 @@ type LLMEmbeddingContent struct {
 	Title       string   `json:"Title" redis:"Title"`
 	Language    string   `json:"Language" redis:"Language"`
 	Id          string   `json:"Id" redis:"Id"`
-	Source      string   `json:"Source" redis:"Source"`
 	Keys        []string `json:"Keys" redis:"Keys"`
 	GeneralKeys []string `json:"GeneralKeys" redis:"GeneralKeys"`
+	Keywords    []string `json:"Keywords" redis:"Keywords"`
+	Sources     string `json:"Sources" redis:"Sources"`
 }
 
 // LLMEmbeddingObject represents a collection of embedded text contents grouped under a specific object ID.
@@ -102,7 +103,7 @@ func (llm LLMContainer) EmbeddFile(Index, Title, fileName string, tc TranscribeC
 	EmbeddingContents := LLMEmbeddingContent{
 		Text:   fileContents,
 		Title:  Title,
-		Source: fileName,
+		Sources: fileName,
 	}
 
 	// Embed the transcribed text into the LLM system
@@ -136,7 +137,7 @@ func (llm LLMContainer) EmbeddURL(Index, url string, tc TranscribeConfig, option
 	// Store transcribed content with the specified language as key
 	EmbeddingContents := LLMEmbeddingContent{
 		Text:   fileContents,
-		Source: url,
+		Sources: url,
 	}
 
 	// Embed the transcribed text into the LLM system
@@ -173,7 +174,6 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 		Index:           Index,
 	}
 
-
 	// Load existing data from Redis if available
 	result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
 
@@ -191,7 +191,7 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	if Contents.Language == "" {
 		Contents.Language = o.Language
 	}
-	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text, o.CotextCleanup), Contents.Source, o.LimitGeneralEmbedding, false)
+	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text, o.CotextCleanup), Contents.Sources, Contents, o.LimitGeneralEmbedding, false)
 	if err != nil {
 		return result, err
 	}
@@ -232,7 +232,7 @@ func (llmEO *LLMEmbeddingObject) load(client *redis.Client, KeyID string) error 
 	ctx := context.Background()
 
 	// Retrieve data from Redis using the provided key
-	data, err := client.Do(ctx, "JSON.GET",  KeyID).Result()
+	data, err := client.Do(ctx, "JSON.GET", KeyID).Result()
 
 	if err == redis.Nil {
 		return fmt.Errorf("key not found")
@@ -243,7 +243,7 @@ func (llmEO *LLMEmbeddingObject) load(client *redis.Client, KeyID string) error 
 	jsonData, ok := data.(string)
 	if !ok {
 		return fmt.Errorf("data is not a LLMEmbeddingObject")
-	}else{
+	} else {
 		err = json.Unmarshal([]byte(jsonData), llmEO)
 		if err != nil {
 			return err
@@ -251,7 +251,6 @@ func (llmEO *LLMEmbeddingObject) load(client *redis.Client, KeyID string) error 
 	}
 
 	// Unmarshal JSON data into the LLMEmbeddingObject structure
-	
 
 	return nil
 }
@@ -276,7 +275,7 @@ func (llmEO LLMEmbeddingObject) delete(rdb *redis.Client, KeyID string) error {
 	}
 	// Delete the specified key from Redis
 	// _, err = rdb.Del(ctx, KeyID).Result()
-	err = deleteKey(ctx,rdb, KeyID,llmEO.EmbeddingPrefix)
+	err = deleteKey(ctx, rdb, KeyID, llmEO.EmbeddingPrefix)
 	if err != nil {
 		return err
 	}
@@ -523,7 +522,7 @@ func (llm *LLMContainer) GetRagIndexs(docs []schema.Document, options ...LLMCall
 				}
 				for idx, indexItem := range indexData {
 					indexItemData, ok := indexItem.(string)
-					if ok && indexItemData=="$.Index" {
+					if ok && indexItemData == "$.Index" {
 						indexValues = append(indexValues, indexData[idx+1].(string))
 						break
 					}

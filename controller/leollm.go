@@ -180,7 +180,7 @@ type LLMContainer struct {
 	Character                           string            // AI assistant's character/personality settings
 	Transcriber                         Transcriber       // Responsible for processing and transcribing content
 	PersistentMemoryManager             PersistentMemory  // Advanced Memory manager controller
-
+	ShowWarnings                        bool              // Mute warnings
 }
 
 // getRedisHost constructs the Redis connection URL based on the stored Redis host and password.
