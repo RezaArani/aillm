@@ -154,7 +154,7 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents stri
 			doc.PageContent = "Title: " + title + "\n" + doc.PageContent
 		}
 		if len(metaData.Keywords) > 0 {
-			doc.PageContent = "Keywords: " + strings.Join(metaData.Keywords, ", ") + "\n" + doc.PageContent
+			doc.PageContent += "\nKeywords: " + strings.Join(metaData.Keywords, ", ") 
 		}
 		docs[idx] = doc
 	}
