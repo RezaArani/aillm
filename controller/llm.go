@@ -380,9 +380,12 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 				languageCapabilityDetectionText = llm.AnswerLanguage
 			}
 		}
-
+		brieflyText:= "briefly "
+		if o.ForceLLMToAnswerLong {
+			brieflyText = ""
+		}
 		// If no relevant documents found, handle response accordingly
-
+		
 		if !hasRag && o.ExtraContext == "" {
 			if !llm.AllowHallucinate && !o.AllowHallucinate {
 				if llm.NoRagErrorMessage != "" {
@@ -404,7 +407,7 @@ Assistant:`
 					memStrPrompt := "Here is the context from our previous interactions:\n" + memoryStr
 					ragText = fmt.Sprintf(`You are a %s AI assistant with knowledge:
 %s
-Think step-by-step and then answer briefly in %s.
+Think step-by-step and then answer `+brieflyText+`in %s.
 without mentioning original text or language information.
 User: %s
 Assistant:`,
@@ -449,7 +452,7 @@ Assistant:`,
 
 %s
 
-Think step-by-step and then answer briefly in %s.
+Think step-by-step and then answer `+brieflyText+` in %s.
 If question is outside this scope, add "@" to the beginning of response and Just answer in %s something similar to 
 "I can't find any answer regarding your question." 
 without mentioning original text or language information.

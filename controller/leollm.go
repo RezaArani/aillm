@@ -95,6 +95,7 @@ type LLMCallOptions struct {
 	ForceLanguage         bool
 	AllowHallucinate         bool
 	Tools                 AillmTools
+	ForceLLMToAnswerLong	bool
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.

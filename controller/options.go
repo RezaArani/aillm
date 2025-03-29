@@ -250,6 +250,20 @@ func (llm *LLMContainer) WithAllowHallucinate(AllowHallucinate bool) LLMCallOpti
 }
 
 
+// WithForceLLMToAnswerLong forces LLM to answer long
+//
+// Parameters:
+//   - forceLong: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithForceLLMToAnswerLong(forceLong bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.ForceLLMToAnswerLong = forceLong
+	}
+}
+
+
 // Experimental
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {
