@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/tmc/langchaingo/embeddings"
@@ -38,6 +39,7 @@ type LLMTextEmbedding struct {
 	ChunkOverlap      int
 	Text              string
 	EmbeddedDocuments []schema.Document
+	lLMContainer      *LLMContainer // LLM container for embedding and vector search
 }
 
 // EmbeddingClient defines an interface to abstract embedding model clients.
@@ -115,13 +117,10 @@ func (llm *LLMContainer) InitEmbedding() error {
 //   - []string: A slice of keys representing the stored embeddings in the vector database.
 //   - int: The number of chunks the text was split into.
 //   - error: An error if the embedding process fails.
-func (llm *LLMContainer) embedText(prefix, language, index, title, contents string, sources string, metaData LLMEmbeddingContent, GeneralEmbeddingDenied, rawKey bool) ([]string, []string, int, error) {
-	var docList []string
-	var generalDocList []string
+func (llm *LLMContainer) embedText(prefix, language, index, title, contents string, sources string, metaData LLMEmbeddingContent, GeneralEmbeddingDenied, rawKey, useLLM bool) (docList []string, generalDocList []string, docLen int, inconsistentChunks map[int]string, err error) {
 	// Check if the embedding model is available
-
 	if llm.Embedder == nil {
-		return nil, nil, 0, errors.New("missing embedding model")
+		return nil, nil, docLen, inconsistentChunks, errors.New("missing embedding model")
 	} else {
 		// Initialize embedding model if it hasn't been initialized yet
 
@@ -137,9 +136,18 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents stri
 	}
 
 	// Split the text content into chunks
-	docs, splitErr := textEmbedding.SplitText()
+	docs, splitErr := []schema.Document{}, error(nil)
+
+	if useLLM {
+		var keywords []string
+		docs, keywords, inconsistentChunks, splitErr = textEmbedding.SplitTextWithLLM()
+		metaData.Keywords = keywords
+	} else {
+		docs, splitErr = textEmbedding.SplitText()
+	}
 	if splitErr != nil {
-		return docList, generalDocList, 0, splitErr
+
+		return docList, generalDocList, docLen, inconsistentChunks, splitErr
 	}
 
 	// Add metadata to each chunk by prepending the source
@@ -154,17 +162,15 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents stri
 			doc.PageContent = "Title: " + title + "\n" + doc.PageContent
 		}
 		if len(metaData.Keywords) > 0 {
-			doc.PageContent += "\nKeywords: " + strings.Join(metaData.Keywords, ", ") 
+			doc.PageContent += "\nKeywords: " + strings.Join(metaData.Keywords, ", ")
 		}
 		docs[idx] = doc
 	}
 
-	
-
 	// Get the embedding model from the initialized client
 	embedder, err := llm.Embedder.NewEmbedder()
 	if err != nil {
-		return docList, generalDocList, 0, splitErr
+		return docList, generalDocList, docLen, inconsistentChunks, splitErr
 	}
 
 	// Setup Redis vector store with index name and embedding model
@@ -190,22 +196,22 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents stri
 	// Retrieve Redis host URL for connection
 	redisHostURL, redisConnectionErr := llm.getRedisHost()
 	if redisConnectionErr != nil {
-		return docList, generalDocList, 0, splitErr
+		return docList, generalDocList, docLen, inconsistentChunks, splitErr
 	}
 
 	// Create a new vector store using Redis and embedding model
 
 	store, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), redisVector, embedderVector)
 	if err != nil {
-		return docList, generalDocList, 0, splitErr
+		return docList, generalDocList, docLen, inconsistentChunks, splitErr
 	}
 
 	// Store the document chunks into the Redis vector store
-	docLen := len(docs)
+	docLen = len(docs)
 	if docLen > 0 {
 		docList, err = store.AddDocuments(context.Background(), docs)
 		if err != nil {
-			return docList, generalDocList, 0, splitErr
+			return docList, generalDocList, docLen, inconsistentChunks, splitErr
 		}
 		if !GeneralEmbeddingDenied && !rawKey {
 			allKey := "all:"
@@ -220,16 +226,85 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents stri
 			generalRedisVector := redisvector.WithIndexName(allKey, true)
 			generalStore, err := redisvector.New(context.TODO(), redisvector.WithConnectionURL(redisHostURL), generalRedisVector, embedderVector)
 			if err != nil {
-				return docList, generalDocList, 0, splitErr
+				return docList, generalDocList, 0, inconsistentChunks, splitErr
 			}
 
 			generalDocList, err = generalStore.AddDocuments(context.Background(), docs)
 			if err != nil {
-				return docList, generalDocList, 0, splitErr
+				return docList, generalDocList, 0, inconsistentChunks, splitErr
 			}
 		}
 
 	}
 
-	return docList, generalDocList, docLen, nil
+	return docList, generalDocList, docLen, inconsistentChunks, nil
+}
+
+// cleanEmbeddings cleans the embeddings from the Redis database.
+//
+// Parameters:
+//   - Confirm: The confirmation string to clean the embeddings.
+//   - prefix: The prefix of the embeddings to clean.
+//   - index: The index of the embeddings to clean.
+//
+// Returns:
+//   - error: An error if the cleaning fails.
+func (llm *LLMContainer) CleanEmbeddings(Confirm, prefix string) error {
+	if Confirm == "yes" {
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, "doc:all:"+prefix,true)
+		if err != nil {
+			return err
+		}
+		_, err = llm.deleteRedisWildCard(llm.RedisClient.redisClient, "doc:context:"+prefix,true)
+		if err != nil {
+			return err
+		}
+		_, err = llm.deleteRedisWildCard(llm.RedisClient.redisClient, "rawDocs:"+prefix,true)
+		if err != nil {
+			return err
+		}
+
+		res, err := llm.RedisClient.redisClient.Do(context.TODO(), "FT._LIST").Result()
+		if err != nil {
+			return err
+		}
+
+		// convert the result to a list of indexes
+		indexes, ok := res.([]interface{})
+		if !ok {
+			return err
+		}
+
+		// delete indexes that match the wildcard
+		err = llm.deleteIndexes(indexes, "context:" + prefix)
+		if err != nil {
+			return err
+		}
+		err = llm.deleteIndexes(indexes, "all:" + prefix)
+		if err != nil {
+			return err
+		}
+		err = llm.deleteIndexes(indexes, "rawDocsIdx:" + prefix)
+		if err != nil {
+			return err
+		}
+
+		//memory indexes should be implemented
+		
+	}
+
+	return nil
+}
+
+func (llm *LLMContainer) deleteIndexes(indexes []interface{}, prefix string) error {
+	for _, idx := range indexes {
+		indexName := fmt.Sprintf("%v", idx)
+		if strings.HasPrefix(indexName, prefix) {
+			_, err := llm.RedisClient.redisClient.Do(context.TODO(), "FT.DROPINDEX", indexName, "DD").Result()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

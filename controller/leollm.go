@@ -87,15 +87,15 @@ type LLMCallOptions struct {
 	searchAll             bool
 	LimitGeneralEmbedding bool
 	CotextCleanup         bool
-	// searchAllLanguage     string
 	character             string
 	PersistentMemory      bool
 	MaxTokens             int
 	LanguageChannel       chan<- string
 	ForceLanguage         bool
-	AllowHallucinate         bool
+	AllowHallucinate      bool
 	Tools                 AillmTools
-	ForceLLMToAnswerLong	bool
+	ForceLLMToAnswerLong  bool
+	UseLLMToSplitText     bool
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.

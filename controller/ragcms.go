@@ -43,7 +43,7 @@ type LLMEmbeddingContent struct {
 	Keys        []string `json:"Keys" redis:"Keys"`
 	GeneralKeys []string `json:"GeneralKeys" redis:"GeneralKeys"`
 	Keywords    []string `json:"Keywords" redis:"Keywords"`
-	Sources     string `json:"Sources" redis:"Sources"`
+	Sources     string   `json:"Sources" redis:"Sources"`
 }
 
 // LLMEmbeddingObject represents a collection of embedded text contents grouped under a specific object ID.
@@ -101,8 +101,8 @@ func (llm LLMContainer) EmbeddFile(Index, Title, fileName string, tc TranscribeC
 
 	// Store transcribed content with language as key
 	EmbeddingContents := LLMEmbeddingContent{
-		Text:   fileContents,
-		Title:  Title,
+		Text:    fileContents,
+		Title:   Title,
 		Sources: fileName,
 	}
 
@@ -136,7 +136,7 @@ func (llm LLMContainer) EmbeddURL(Index, url string, tc TranscribeConfig, option
 
 	// Store transcribed content with the specified language as key
 	EmbeddingContents := LLMEmbeddingContent{
-		Text:   fileContents,
+		Text:    fileContents,
 		Sources: url,
 	}
 
@@ -175,7 +175,10 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	}
 
 	// Load existing data from Redis if available
-	result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
+	err := result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
+	if err != nil && err.Error() != "key not found" {
+		return result, err
+	}
 
 	// Process embedding for each language in contents
 	if result.Contents == nil {
@@ -191,17 +194,17 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	if Contents.Language == "" {
 		Contents.Language = o.Language
 	}
-	tempKeys, generalKeys, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text, o.CotextCleanup), Contents.Sources, Contents, o.LimitGeneralEmbedding, false)
+	tempKeys, generalKeys, _, _, err := llm.embedText(o.getEmbeddingPrefix(), Contents.Language, Index, Contents.Title, llm.Transcriber.cleanupText(Contents.Text, o.CotextCleanup), Contents.Sources, Contents, o.LimitGeneralEmbedding, false, o.UseLLMToSplitText)
 	if err != nil {
 		return result, err
 	}
 	curContents := result.Contents[Contents.Id]
 	// Cleanup previous keys
 	for _, key := range curContents.Keys {
-		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
 	}
 	for _, key := range curContents.GeneralKeys {
-		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
 	}
 
 	// updating with new keys
@@ -403,24 +406,31 @@ func (llm *LLMContainer) RemoveEmbedding(Index string, options ...LLMCallOption)
 		EmbeddingPrefix: o.getEmbeddingPrefix(),
 		Index:           Index,
 	}
+	
 	// Load the embedding object from Redis
-	llmo.load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	err:= llmo.load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	if err != nil && err.Error() != "key not found" {
+		return err
+	}
+
 
 	// Delete all associated keys stored in Redis
 	for _, content := range llmo.Contents {
 		for _, key := range content.Keys {
-			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
 			if err != nil {
 				return err
 			}
 		}
 		for _, key := range content.GeneralKeys {
-			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
 			if err != nil {
 				return err
 			}
 		}
 	}
+	//Remove indexes should be implemented
+	
 
 	// Remove the embedding object from Redis
 	return llmo.delete(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
@@ -442,13 +452,13 @@ func (llm *LLMContainer) RemoveEmbeddingSubKey(Index, rawDocID string, options .
 	// Delete all associated keys stored in Redis
 
 	for _, key := range keyToDelete.Keys {
-		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
 		if err != nil {
 			return err
 		}
 	}
 	for _, key := range keyToDelete.GeneralKeys {
-		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key)
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
 		if err != nil {
 			return err
 		}

@@ -429,15 +429,15 @@ Assistant:`,
 					re := regexp.MustCompile(`<[^>]+>`)
 					content = re.ReplaceAllString(content, "")
 
-					// جایگزینی فضاهای تکراری با یک فضای واحد
+					// Replacing repeated spaces with a single space
 					reSpaces := regexp.MustCompile(`\s+`)
 					content = reSpaces.ReplaceAllString(content, " ")
 
-					// حذف خطوط خالی تکراری
+					// Removing empty lines
 					reNewlines := regexp.MustCompile(`\n+`)
 					content = reNewlines.ReplaceAllString(content, "\n")
 
-					// حذف فاصله‌های اضافی ابتدا و انتها
+					// Removing extra spaces at the beginning and end
 					content = strings.TrimSpace(content)
 				}
 				ragText += content

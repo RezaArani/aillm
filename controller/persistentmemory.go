@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -69,13 +70,13 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 
 	embeddingPrefix := pm.MemoryPrefix + ":" + sessionID + ":aillm_vector_idx"
 
-	promotPart := "\nUser: " + query.Question + "\nAssistant: " + query.Answer + "\n"
+	promotPart :=fmt.Sprintf("\nUser: %v\nAssistant: %v\n\n",query.Question,query.Answer) 
 	memoryembeddingContent := LLMEmbeddingContent{
 		Title: promotPart,
 		
 	}
 
-	keys, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "",memoryembeddingContent, true, true)
+	keys, _, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "",memoryembeddingContent, true, true, false)
 	//
 	//Updating redis TTL
 
@@ -100,12 +101,12 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 	curUserMemory.Questions = append(curUserMemory.Questions, query)
 
 	if len(curUserMemory.Questions) >= 2 {
-		// curUserMemory.Summary = curUserMemory.Questions[len(curUserMemory.Questions)-1].Summary
 		PrevConversation := ""
 		for _, question := range curUserMemory.Questions {
-			if question.Answer[0] != '@' {
-				PrevConversation += "User: " + question.Question + "\nAssistant: " + question.Answer + "\n"
+			if question.Answer[0] == '@' {
+				question.Answer = question.Answer[1:]
 			}
+			PrevConversation += fmt.Sprintf("User: %v\nAssistant: %v\n\n",question.Question,question.Answer)
 		}
 		resp, err := pm.lLMContainer.AskLLM("", pm.lLMContainer.WithExactPrompt("You are a helpful assistant that summarizes conversations as short as possible with details for future use of LLM memory.\n"+PrevConversation),pm.lLMContainer.WithAllowHallucinate(true))
 		if err != nil {

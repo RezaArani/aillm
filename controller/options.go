@@ -264,6 +264,23 @@ func (llm *LLMContainer) WithForceLLMToAnswerLong(forceLong bool) LLMCallOption 
 }
 
 
+
+// WithLLMSpliter uses LLM to split text
+//
+// Parameters:
+//   - UseLLMToSplitText: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithLLMSpliter(UseLLMToSplitText bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.UseLLMToSplitText = UseLLMToSplitText
+	}
+}
+
+
+
+
 // Experimental
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {
