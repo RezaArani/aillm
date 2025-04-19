@@ -66,8 +66,8 @@ func (llm *LLMContainer) initPersistentMemoryManager() {
 
 // Returns:
 //   - error: An error if the embedding process fails.
-func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error {
-
+func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) (TokenUsage, error) {
+	tokenUsage := TokenUsage{}
 	embeddingPrefix := pm.MemoryPrefix + ":" + sessionID + ":aillm_vector_idx"
 
 	promotPart :=fmt.Sprintf("\nUser: %v\nAssistant: %v\n\n",query.Question,query.Answer) 
@@ -84,7 +84,7 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 		pm.redisClient.Expire(context.TODO(), key, pm.MemoryTTL)
 	}
 	if err != nil {
-		return err
+		return tokenUsage, err
 	}
 	query.Keys = keys
 	// fetch previous memory from Redis
@@ -94,7 +94,7 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 	if curUserMemoryStr != "" {
 		err = json.Unmarshal([]byte(curUserMemoryStr), &curUserMemory)
 		if err != nil {
-			return err
+			return tokenUsage, err
 		}
 	}
 
@@ -108,20 +108,23 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) error 
 			}
 			PrevConversation += fmt.Sprintf("User: %v\nAssistant: %v\n\n",question.Question,question.Answer)
 		}
-		resp, err := pm.lLMContainer.AskLLM("", pm.lLMContainer.WithExactPrompt("You are a helpful assistant that summarizes conversations as short as possible with details for future use of LLM memory.\n"+PrevConversation),pm.lLMContainer.WithAllowHallucinate(true))
+		resp, err := pm.lLMContainer.AskLLM("", pm.lLMContainer.WithExactPrompt("You are a helpful assistant that summarizes conversations as short as possible with details for future use of LLM memory.\n"+PrevConversation),pm.lLMContainer.WithAllowHallucinate(true),pm.lLMContainer.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			tokenUsage.OutputTokens ++
+			return nil
+		}))
 		if err != nil {
-			return err
+			return tokenUsage, err
 		}
 		curUserMemory.Summary = resp.Response.Choices[0].Content
 	}
 
 	curUserMemoryBytes, err := json.Marshal(curUserMemory)
 	if err != nil {
-		return err
+		return tokenUsage, err
 	}
 	err = pm.redisClient.Set(context.TODO(), "rawMemory:"+pm.MemoryPrefix+":"+sessionID, string(curUserMemoryBytes), pm.MemoryTTL).Err()
 
-	return err
+	return tokenUsage, err
 }
 
 // GetMemory retrieves stored session memory for a given session ID.

@@ -21,7 +21,9 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -85,8 +87,10 @@ func (llm *LLMContainer) Init() error {
 		Addr:     llm.RedisClient.Host,
 		Password: llm.RedisClient.Password,
 		DB:       0,
+		DialTimeout: 5 * time.Second,
+
 	})
-	ctx := context.Background()
+	ctx := context.TODO()
 	// Test Redis connection
 	_, err = llm.RedisClient.redisClient.Ping(ctx).Result()
 	if err != nil {
@@ -134,31 +138,38 @@ func (llm *LLMContainer) Init() error {
 //   - string: detected Language by LLM Model.
 //   - error: An error if the query fails or if essential components are missing.
 
-func (llm *LLMContainer) GetQueryLanguage(Query, sessionId string, languageChannel chan<- string) (string, error) {
+func (llm *LLMContainer) GetQueryLanguage(Query, sessionId string, languageChannel chan<- string) (string, TokenUsage, error) {
 	llmclient, err := llm.LLMClient.NewLLMClient()
+	tokenReport := TokenUsage{}
 	if err != nil {
-		return "", err
+		return "", tokenReport, err
 	}
+
 	langResponse, langErr := llmclient.GenerateContent(context.TODO(),
 		[]llms.MessageContent{
 
 			llms.TextParts(llms.ChatMessageTypeHuman, `What language is "`+Query+`" in? Say just it in one word without "." and just return "NONE" if you can't detect it.`),
 		},
+		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			tokenReport.OutputTokens++
+			return nil
+		}),
 		llms.WithTemperature(0))
 	if langErr != nil {
-		return "", langErr
+		return "", tokenReport, langErr
 	}
 
-	return langResponse.Choices[0].Content, nil
+	return langResponse.Choices[0].Content, tokenReport, nil
 
 }
-func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, languageChannel chan<- string) (languageCapabilityDetectionFunction, languageCapabilityDetectionText string) {
+func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, languageChannel chan<- string) (languageCapabilityDetectionFunction, languageCapabilityDetectionText string, LanguageDetectionTokens TokenUsage) {
 	if llm.userLanguage == nil {
 		llm.userLanguage = make(map[string]string)
 	}
 	if llm.userLanguage[SessionId] == "" {
 
-		userQueryLanguage, detectionError := llm.GetQueryLanguage(Query, SessionId, languageChannel)
+		userQueryLanguage, queryLanguageDetectionTokens, detectionError := llm.GetQueryLanguage(Query, SessionId, languageChannel)
+		LanguageDetectionTokens = queryLanguageDetectionTokens
 		if detectionError == nil && userQueryLanguage != "NONE" {
 			llm.userLanguage[SessionId] = userQueryLanguage
 		}
@@ -188,7 +199,7 @@ func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, language
 		}()
 
 	}
-	return languageCapabilityDetectionFunction, languageCapabilityDetectionText
+	return languageCapabilityDetectionFunction, languageCapabilityDetectionText, LanguageDetectionTokens
 
 }
 
@@ -211,7 +222,7 @@ func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, language
 func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResult, error) {
 
 	result := LLMResult{}
-
+	totalTokens := 0
 	// Retrieve memory for the session
 
 	o := LLMCallOptions{}
@@ -244,7 +255,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			usermemory := Memory{}
 			lastQuery, usermemory, memoryStr, persistentMemoryHistory, _ = llm.PersistentMemoryManager.GetMemory(o.SessionID, Query)
 			MemorySummary = usermemory.Summary
-			KNNMemoryStr += lastQuery.Question 
+			KNNMemoryStr += lastQuery.Question
 		}
 	}
 	ctx := context.Background()
@@ -253,7 +264,21 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	var msgs []llms.MessageContent
 	hasRag := false
 	var resDocs []schema.Document
+	// Set Date and Time
+	datePrompt := ""
+	if o.IncludeDate {
 
+		datePrompt = "- It is " + time.Now().Format("Monday, 2006-01-02 15:04") + ". Adjust your response based on the current date and time.\n"
+	}
+	ragReferencesPrompt := ""
+	if o.RagReferences {
+		ragReferencesPrompt = `- include chunk references at the end of your response like this example:
+ {"references":["chunk_id_1","chunk_id_2","chunk_id_3"]}
+- Just include refrences highly related to the question.
+- It must be a valid json object.
+- It must start with "###" and it must be exists in the response if there are references.
+`
+	}
 	// check exact prompt provided or not
 	if o.ExactPrompt == "" {
 		// Check if LLM client is available
@@ -296,9 +321,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			if o.getEmbeddingPrefix() != "" {
 				KNNPrefix += o.getEmbeddingPrefix() + ":"
 			}
-			if o.Language != "" {
-				KNNPrefix += o.Language + ":"
-			}
+
 		} else {
 			KNNPrefix += o.Index + ":"
 			if o.Language == "" {
@@ -306,9 +329,11 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 					o.Language = llm.FallbackLanguage
 				}
 			}
-			if o.Language != "" {
-				KNNPrefix += o.Language + ":"
-			}
+
+		}
+		// Issue with forced language. Interference with vector search index!!!! Will be fixed in the future.
+		if o.Language != "" && !o.ForceLanguage {
+			KNNPrefix += o.Language + ":"
 		}
 		KNNQuery := Query
 
@@ -370,28 +395,38 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		ragText := ""
 
 		// Prepare the language detection function based on the query
-		languageCapabilityDetectionFunction := `detect language of "` + Query + `"`
-		languageCapabilityDetectionText := `detected language without mentioning it.`
-		if llm.LLMModelLanguageDetectionCapability {
-			languageCapabilityDetectionFunction, languageCapabilityDetectionText = llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
+		languageCapabilityDetectionFunction := ``
+		languageCapabilityDetectionText := ``
+
+		if o.ForceLanguage && o.Language != "" {
+			languageCapabilityDetectionText = o.Language
 		} else {
-			if llm.AnswerLanguage != "" {
-				languageCapabilityDetectionFunction = ""
-				languageCapabilityDetectionText = llm.AnswerLanguage
+			languageCapabilityDetectionFunction = `detect language of "` + Query + `"`
+			languageCapabilityDetectionText = `detected language without mentioning it.`
+
+			if llm.LLMModelLanguageDetectionCapability {
+				LanguageDetectionTokens := TokenUsage{}
+				languageCapabilityDetectionFunction, languageCapabilityDetectionText, LanguageDetectionTokens = llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
+				result.TokenReport.LanguageDetectionTokens = LanguageDetectionTokens
+			} else {
+				if llm.AnswerLanguage != "" {
+					languageCapabilityDetectionText = llm.AnswerLanguage
+				}
 			}
 		}
-		brieflyText:= "briefly "
+
+		brieflyText := "briefly "
 		if o.ForceLLMToAnswerLong {
 			brieflyText = ""
 		}
 		// If no relevant documents found, handle response accordingly
-		
+
 		if !hasRag && o.ExtraContext == "" {
 			if !llm.AllowHallucinate && !o.AllowHallucinate {
 				if llm.NoRagErrorMessage != "" {
-					ragText = languageCapabilityDetectionFunction + `You are an AI assistant, Think step-by-step before answer.
+					ragText = languageCapabilityDetectionFunction + `You are an AI assistant specialized in providing accurate and concise answers.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
-Assistant:`
+**Assistant:** `
 
 					msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, ragText))
 				} else {
@@ -404,14 +439,21 @@ Assistant:`
 						memoryStr = MemorySummary + "\n" + memoryStr
 					}
 
-					memStrPrompt := "Here is the context from our previous interactions:\n" + memoryStr
-					ragText = fmt.Sprintf(`You are a %s AI assistant with knowledge:
+					memStrPrompt := `**Previous Interactions:**  
+` + memoryStr
+					ragText = fmt.Sprintf(`You are a %s AI assistant specialized in providing accurate and concise answers based on the following knowledge:
+**Contextual Knowledge:**
 %s
-Think step-by-step and then answer `+brieflyText+`in %s.
-without mentioning original text or language information.
-User: %s
-Assistant:`,
-						o.character, memStrPrompt, languageCapabilityDetectionText, Query)
+**Instructions:** 
+- Analyze the question carefully and reason step-by-step.
+- Then, provide a **clear answer `+brieflyText+`in %s.**.
+- If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
+  **"I can't find any answer regarding your question."**
+- Do **not** reference the original text or mention language/translation details.
+%s
+**User:** %s
+**Assistant:** `,
+						o.character, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, Query)
 					ragArray = append(ragArray, llms.TextPart(ragText))
 					curMessageContent.Parts = ragArray
 					curMessageContent.Role = llms.ChatMessageTypeSystem
@@ -424,7 +466,20 @@ Assistant:`,
 				if idx > 0 {
 					ragText += "\n"
 				}
-				content := doc.PageContent
+				content := "Chunk " + strconv.Itoa(idx+1) + ":\n"
+				
+				if o.RagReferences {
+					rawKey := doc.Metadata["rawkey"]
+
+					if rawKey != nil {
+						rawKeyObject := LLMEmbeddingContent{}
+						err := json.Unmarshal([]byte(rawKey.(string)), &rawKeyObject)
+						if err == nil {
+							content += `####Reference: ` + rawKeyObject.Id + "\n"
+						}
+					}
+				}
+				content += doc.PageContent + "\n\n"
 				if o.CotextCleanup {
 					re := regexp.MustCompile(`<[^>]+>`)
 					content = re.ReplaceAllString(content, "")
@@ -445,21 +500,29 @@ Assistant:`,
 			ragText += "\n" + o.ExtraContext
 			memStrPrompt := ""
 			if memoryStr != "" {
-				memStrPrompt = "Here is the context from our previous interactions:\n" + memoryStr
+				memStrPrompt = `**Previous Interactions:**  
+` + memoryStr
 			}
-			ragText = fmt.Sprintf(`You are a %s AI assistant with knowledge:
+			ragText = fmt.Sprintf(`You are a %s AI assistant specialized in providing accurate and concise answers based on the following knowledge:
+**Contextual Knowledge:**			
 %s
 
 %s
 
-Think step-by-step and then answer `+brieflyText+` in %s.
-If question is outside this scope, add "@" to the beginning of response and Just answer in %s something similar to 
-"I can't find any answer regarding your question." 
-without mentioning original text or language information.
+**Instructions:**
+- Analyze the question carefully and reason step-by-step.
+- Then, provide a **clear answer `+brieflyText+` in %s.**.
+- If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
+**"I can't find any answer regarding your question."**
+- Do **not** reference the original text or mention language/translation details.
+- Ignore chunk completely if it is not related to the question.
+- Do not include chunk number in the response.
+%s
+%s
 
-User: %s
-Assistant:`,
-				o.character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, Query)
+**User:** %s
+**Assistant:** `,
+				o.character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
 
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
@@ -471,7 +534,7 @@ Assistant:`,
 		memoryAddAllowed = hasRag || llm.AllowHallucinate || o.AllowHallucinate
 	} else {
 		if o.ForceLanguage {
-			_, Language := llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
+			_, Language, _ := llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
 			if Language != "" {
 				msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, "Reply in "+Language))
 			}
@@ -483,10 +546,13 @@ Assistant:`,
 	isFirstWord := true
 	isFirstChunk := true
 	// Generate content using the LLM and stream results via the provided callback function
+	refrencesStr := ""
+	startRefrences := false
 	calloptions := []llms.CallOption{
 		llms.WithTemperature(llm.Temperature),
 		llms.WithTopP(llm.TopP),
 		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			totalTokens++
 			if isFirstChunk {
 				isFirstChunk = false
 				result.addAction("First Chunk Received", o.ActionCallFunc)
@@ -495,11 +561,20 @@ Assistant:`,
 				startsWithAt := chunk[0] == 64
 				if memoryAddAllowed && startsWithAt {
 					memoryAddAllowed = false
+					
 				}
 				isFirstWord = isFirstWord && chunk[0] != 32
 				if isFirstWord && startsWithAt {
 					chunk = chunk[1:]
 				}
+			}
+			if o.RagReferences && startRefrences {
+				refrencesStr += string(chunk)
+				return nil
+			}
+			if o.RagReferences && string(chunk) == "###" {
+				startRefrences = true
+				return nil
 			}
 			if o.StreamingFunc == nil {
 				return nil
@@ -514,6 +589,8 @@ Assistant:`,
 		messageHistory := []llms.MessageContent{
 			llms.TextParts(llms.ChatMessageTypeHuman, memoryStr),
 		}
+
+		// Token usage calculation should be done here
 		resp, err := llmclient.GenerateContent(ctx, messageHistory, llms.WithTools(o.Tools.Tools))
 		if err != nil {
 			return result, err
@@ -569,7 +646,6 @@ Assistant:`,
 	// 	)
 	// }
 	result.addAction("Sending Request to LLM", o.ActionCallFunc)
-
 	response, err = llmclient.GenerateContent(ctx,
 		msgs,
 		calloptions...,
@@ -579,15 +655,20 @@ Assistant:`,
 	}
 
 	result.addAction("Finished", o.ActionCallFunc)
-
+	failedToRespond :=   !memoryAddAllowed
 	memoryAddAllowed = memoryAddAllowed && o.SessionID != ""
+
 	if response != nil {
 
 		// Update memory with the new query if RAG data was found
 		if (hasRag || llm.AllowHallucinate || o.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
+			choiceContent := response.Choices[0].Content
+			if o.RagReferences {
+				choiceContent = strings.Split(choiceContent, "###")[0]
+			}
 			queryData := MemoryData{
 				Question: Query,
-				Answer:   response.Choices[0].Content,
+				Answer:   choiceContent,
 			}
 
 			if !o.PersistentMemory {
@@ -599,7 +680,11 @@ Assistant:`,
 
 			} else {
 				//persistent memory
-				llm.PersistentMemoryManager.AddMemory(o.SessionID, queryData)
+				tokenUsage, err := llm.PersistentMemoryManager.AddMemory(o.SessionID, queryData)
+				if err != nil {
+					return result, err
+				}
+				result.TokenReport.MemorySummarizationTokens = tokenUsage
 
 			}
 		}
@@ -612,12 +697,21 @@ Assistant:`,
 
 		}
 	}
+	result.TokenReport.CompletionTokens.OutputTokens = totalTokens
 	result = LLMResult{
-		Prompt:   msgs,
-		Response: response,
-		RagDocs:  resDocs,
-		Memory:   memoryData[:],
-		Actions:  result.Actions,
+		Prompt:        msgs,
+		Response:      response,
+		RagDocs:       resDocs,
+		Memory:        memoryData[:],
+		Actions:       result.Actions,
+		MemorySummary: MemorySummary,
+		TokenReport:   result.TokenReport,
+		FailedToRespond: failedToRespond,
+	}
+	if o.RagReferences {
+		refrencesArray := llmReference{}
+		json.Unmarshal([]byte(refrencesStr), &refrencesArray)
+		result.LLMReferences = refrencesArray.References
 	}
 	return result, err
 }

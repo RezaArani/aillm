@@ -281,6 +281,34 @@ func (llm *LLMContainer) WithLLMSpliter(UseLLMToSplitText bool) LLMCallOption {
 
 
 
+// WithIncludeDate include date in prompt
+//
+// Parameters:
+//   - IncludeDate: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithIncludeDate(IncludeDate bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.IncludeDate = IncludeDate
+	}
+}
+
+
+// WithIncludeDate include date in prompt
+//
+// Parameters:
+//   - IncludeDate: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithRagReferences(RagReferences bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.RagReferences = RagReferences
+	}
+}
+
+
 // Experimental
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {

@@ -142,8 +142,8 @@ func (emb *LLMTextEmbedding) SplitTextWithLLM() (docs []schema.Document,keywords
 			}
 			if len(content) > 0 {
 				generatedkeywords := strings.Split(trimContent(content[1]), ",")
-				for _, keyword := range generatedkeywords {
-					keyword = strings.TrimSpace(keyword)
+				for idx, keyword := range generatedkeywords {
+					generatedkeywords[idx] = strings.TrimSpace(keyword)
 				}
 				keywords = append(keywords, generatedkeywords...)
 			}

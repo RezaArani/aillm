@@ -62,6 +62,7 @@ type LLMEmbeddingObject struct {
 	Contents        map[string]LLMEmbeddingContent `json:"Contents" redis:"Contents"`
 }
 
+ 
 // getRawDocRedisId generates a unique Redis key for storing raw document data.
 // It combines the object ID and a sanitized version of the Index to create a consistent key format.
 //
@@ -173,9 +174,15 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 		EmbeddingPrefix: o.getEmbeddingPrefix(),
 		Index:           Index,
 	}
-
+	ctx := context.TODO()
+	_, err := llm.RedisClient.redisClient.Ping(ctx).Result()
+	if err != nil {
+		return result, err
+	}
+	
+	
 	// Load existing data from Redis if available
-	err := result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
+	err = result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
 	if err != nil && err.Error() != "key not found" {
 		return result, err
 	}

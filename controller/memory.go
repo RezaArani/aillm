@@ -43,6 +43,7 @@ type MemoryData struct {
 	Question string
 	Answer   string
 	Keys     []string
+	Summary  string
 }
 
 // MemoryManager manages session memories with a time-to-live (TTL) mechanism.
