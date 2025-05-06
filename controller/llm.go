@@ -271,14 +271,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	}
 	ragReferencesPrompt := ""
 	if o.RagReferences {
-		// 		ragReferencesPrompt = `- If your answer includes any references, the very first characters of references part must be the marker:⧉
-		// - This line must be at the top, followed by a newline, then the references JSON object.
-		// - include chunk references at the end of your response like this example:
-		// {"references":["chunk_id_1","chunk_id_2","chunk_id_3"]}
-		// - If there are no references, do not include the marker and references part at all.
-		// - Just include refrences highly related to the question.
-		// - JSON part after "⧉" must be a valid json object.
-		// `
+
 		ragReferencesPrompt = `### Output Formatting Rules:
 - First, output the **full natural language answer**, formatted clearly.  
 - Then, on a **new line after the full answer**, add the **reference line** that begins with **⧉**, followed by a single valid JSON object in this format:  
