@@ -53,16 +53,17 @@ type LLMConfig struct {
 //   - Actions: A slice of LLMAction structs, each representing a logged action or milestone during the query lifecycle.
 //   - FailedToRespond: A boolean indicating if the LLM failed to respond.
 type LLMResult struct {
-	Prompt        []llms.MessageContent
-	RagDocs       []schema.Document
-	Response      *llms.ContentResponse
-	Memory        []MemoryData
-	MemorySummary string
-	Actions       []LLMAction
-	LLMReferences []string
-	TokenReport   TokenReport
+	Prompt          []llms.MessageContent
+	RagDocs         []schema.Document
+	Response        *llms.ContentResponse
+	Memory          []MemoryData
+	MemorySummary   string
+	Actions         []LLMAction
+	LLMReferences   []string
+	TokenReport     TokenReport
 	FailedToRespond bool
 }
+
 // TokenUsage represents the usage of tokens in a specific context.
 //
 // This struct captures the number of input and output tokens used in a given context.
@@ -71,7 +72,7 @@ type LLMResult struct {
 //   - InputTokens: The number of input tokens consumed.
 //   - OutputTokens: The number of output tokens generated.
 type TokenUsage struct {
-	InputTokens int
+	InputTokens  int
 	OutputTokens int
 }
 
@@ -87,12 +88,11 @@ type TokenUsage struct {
 //   - LanguageDetectionTokens: The number of tokens used in the language detection.
 //   - MemorySummarizationTokens: The number of tokens used in the memory summarization.
 type TokenReport struct {
-	CompletionTokens TokenUsage
-	TextChunkingTokens TokenUsage
-	LanguageDetectionTokens TokenUsage
+	CompletionTokens          TokenUsage
+	TextChunkingTokens        TokenUsage
+	LanguageDetectionTokens   TokenUsage
 	MemorySummarizationTokens TokenUsage
 }
-
 
 type llmReference struct {
 	References []string `json:"references"`

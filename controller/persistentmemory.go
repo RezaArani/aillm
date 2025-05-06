@@ -70,13 +70,12 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) (Token
 	tokenUsage := TokenUsage{}
 	embeddingPrefix := pm.MemoryPrefix + ":" + sessionID + ":aillm_vector_idx"
 
-	promotPart :=fmt.Sprintf("\nUser: %v\nAssistant: %v\n\n",query.Question,query.Answer) 
+	promotPart := fmt.Sprintf("\nUser: %v\nAssistant: %v\n\n", query.Question, query.Answer)
 	memoryembeddingContent := LLMEmbeddingContent{
 		Title: promotPart,
-		
 	}
 
-	keys, _, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "",memoryembeddingContent, true, true, false)
+	keys, _, _, _, err := pm.lLMContainer.embedText("Memory", "aillm", embeddingPrefix, "", promotPart, "", memoryembeddingContent, true, true, false)
 	//
 	//Updating redis TTL
 
@@ -106,10 +105,10 @@ func (pm *PersistentMemory) AddMemory(sessionID string, query MemoryData) (Token
 			if question.Answer[0] == '@' {
 				question.Answer = question.Answer[1:]
 			}
-			PrevConversation += fmt.Sprintf("User: %v\nAssistant: %v\n\n",question.Question,question.Answer)
+			PrevConversation += fmt.Sprintf("User: %v\nAssistant: %v\n\n", question.Question, question.Answer)
 		}
-		resp, err := pm.lLMContainer.AskLLM("", pm.lLMContainer.WithExactPrompt("You are a helpful assistant that summarizes conversations as short as possible with details for future use of LLM memory.\n"+PrevConversation),pm.lLMContainer.WithAllowHallucinate(true),pm.lLMContainer.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			tokenUsage.OutputTokens ++
+		resp, err := pm.lLMContainer.AskLLM("", pm.lLMContainer.WithExactPrompt("You are a helpful assistant that summarizes conversations as short as possible with details for future use of LLM memory.\n"+PrevConversation), pm.lLMContainer.WithAllowHallucinate(true), pm.lLMContainer.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			tokenUsage.OutputTokens++
 			return nil
 		}))
 		if err != nil {
@@ -144,8 +143,14 @@ func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryDat
 	curUserMemory := Memory{}
 
 	memoryhistory := []schema.Document{}
-	var err error
+
 	// Get last question from Memory
+
+	_, err := pm.redisClient.Ping(context.TODO()).Result()
+	if err != nil {
+		return MemoryData{}, curUserMemory, "", memoryhistory, err
+	}
+
 	redisCmd := pm.redisClient.Get(context.TODO(), "rawMemory:"+pm.MemoryPrefix+":"+sessionID)
 	lastQuestion := MemoryData{}
 	if redisCmd.Err() != nil {
@@ -183,7 +188,7 @@ func (pm *PersistentMemory) GetMemory(sessionID string, query string) (MemoryDat
 //   - sessionID: The unique identifier for the session to be deleted.
 func (pm *PersistentMemory) DeleteMemory(sessionID string) error {
 	// llm.userLanguage[o.SessionID]
- 	if sessionID == "" {
+	if sessionID == "" {
 		return nil
 	}
 	if pm.lLMContainer.userLanguage != nil {

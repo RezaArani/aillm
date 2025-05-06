@@ -84,11 +84,10 @@ func (llm *LLMContainer) Init() error {
 
 	// Establish a connection to the Redis server
 	llm.RedisClient.redisClient = redis.NewClient(&redis.Options{
-		Addr:     llm.RedisClient.Host,
-		Password: llm.RedisClient.Password,
-		DB:       0,
+		Addr:        llm.RedisClient.Host,
+		Password:    llm.RedisClient.Password,
+		DB:          0,
 		DialTimeout: 5 * time.Second,
-
 	})
 	ctx := context.TODO()
 	// Test Redis connection
@@ -272,11 +271,13 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	}
 	ragReferencesPrompt := ""
 	if o.RagReferences {
-		ragReferencesPrompt = `- include chunk references at the end of your response like this example:
- {"references":["chunk_id_1","chunk_id_2","chunk_id_3"]}
+		ragReferencesPrompt = `.		
+- include chunk references at the end of your response like this example:
+ ⧉ {"references":["chunk_id_1","chunk_id_2","chunk_id_3"]}
+- If there are any references in the response, you must start the response with a marker that begins with "⧉" (e.g., ⧉ {"references":["chunk_id_1","chunk_id_2","chunk_id_3"]}) before anything else.
+- If there are no references, do not include the marker at all.
 - Just include refrences highly related to the question.
-- It must be a valid json object.
-- It must start with "###" and it must be exists in the response if there are references.
+- JSON part after "⧉" must be a valid json object.
 `
 	}
 	// check exact prompt provided or not
@@ -426,6 +427,8 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 				if llm.NoRagErrorMessage != "" {
 					ragText = languageCapabilityDetectionFunction + `You are an AI assistant specialized in providing accurate and concise answers.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
+- Start the response with "@".
+- Ignore all of the references and do not include them in the response.
 **Assistant:** `
 
 					msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, ragText))
@@ -448,7 +451,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 - Analyze the question carefully and reason step-by-step.
 - Then, provide a **clear answer `+brieflyText+`in %s.**.
 - If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
-  **"I can't find any answer regarding your question."**
+**"I can't find any answer regarding your question."**. Do not forget to add **@** at the start of the response in case of unanswerable question.
 - Do **not** reference the original text or mention language/translation details.
 %s
 **User:** %s
@@ -467,7 +470,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 					ragText += "\n"
 				}
 				content := "Chunk " + strconv.Itoa(idx+1) + ":\n"
-				
+
 				if o.RagReferences {
 					rawKey := doc.Metadata["rawkey"]
 
@@ -510,28 +513,29 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 %s
 
 **Instructions:**
-- Analyze the question carefully and reason step-by-step.
+- Analyze the question carefully and reason step-by-step and think about the question and answer first.
 - Then, provide a **clear answer `+brieflyText+` in %s.**.
 - If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
-**"I can't find any answer regarding your question."**
+**"I can't find any answer regarding your question."**. Do not forget to add **@** at the start of the response in case of unanswerable question.
 - Do **not** reference the original text or mention language/translation details.
 - Ignore chunk completely if it is not related to the question.
 - Do not include chunk number in the response.
+
 %s
 %s
 
 **User:** %s
 **Assistant:** `,
 				o.character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
-
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
 			msgs = append(msgs, curMessageContent)
+
 		}
 
 		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
-		memoryAddAllowed = hasRag || llm.AllowHallucinate || o.AllowHallucinate
+		memoryAddAllowed = hasRag || llm.AllowHallucinate
 	} else {
 		if o.ForceLanguage {
 			_, Language, _ := llm.setupResponseLanguage(Query, o.SessionID, o.LanguageChannel)
@@ -548,6 +552,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 	// Generate content using the LLM and stream results via the provided callback function
 	refrencesStr := ""
 	startRefrences := false
+	failedToRespond := false
 	calloptions := []llms.CallOption{
 		llms.WithTemperature(llm.Temperature),
 		llms.WithTopP(llm.TopP),
@@ -559,9 +564,9 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 			}
 			if isFirstWord && len(chunk) > 0 {
 				startsWithAt := chunk[0] == 64
-				if memoryAddAllowed && startsWithAt {
-					memoryAddAllowed = false
-					
+				if startsWithAt {
+
+					failedToRespond = true
 				}
 				isFirstWord = isFirstWord && chunk[0] != 32
 				if isFirstWord && startsWithAt {
@@ -572,7 +577,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 				refrencesStr += string(chunk)
 				return nil
 			}
-			if o.RagReferences && string(chunk) == "###" {
+			if o.RagReferences && string(chunk) == "⧉" {
 				startRefrences = true
 				return nil
 			}
@@ -655,7 +660,6 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 	}
 
 	result.addAction("Finished", o.ActionCallFunc)
-	failedToRespond :=   !memoryAddAllowed
 	memoryAddAllowed = memoryAddAllowed && o.SessionID != ""
 
 	if response != nil {
@@ -664,7 +668,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 		if (hasRag || llm.AllowHallucinate || o.AllowHallucinate) && memoryAddAllowed && response.Choices != nil && len(response.Choices) > 0 {
 			choiceContent := response.Choices[0].Content
 			if o.RagReferences {
-				choiceContent = strings.Split(choiceContent, "###")[0]
+				choiceContent = strings.Split(choiceContent, "⧉")[0]
 			}
 			queryData := MemoryData{
 				Question: Query,
@@ -699,13 +703,13 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 	}
 	result.TokenReport.CompletionTokens.OutputTokens = totalTokens
 	result = LLMResult{
-		Prompt:        msgs,
-		Response:      response,
-		RagDocs:       resDocs,
-		Memory:        memoryData[:],
-		Actions:       result.Actions,
-		MemorySummary: MemorySummary,
-		TokenReport:   result.TokenReport,
+		Prompt:          msgs,
+		Response:        response,
+		RagDocs:         resDocs,
+		Memory:          memoryData[:],
+		Actions:         result.Actions,
+		MemorySummary:   MemorySummary,
+		TokenReport:     result.TokenReport,
 		FailedToRespond: failedToRespond,
 	}
 	if o.RagReferences {
