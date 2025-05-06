@@ -577,7 +577,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 				refrencesStr += string(chunk)
 				return nil
 			}
-			if o.RagReferences && string(chunk) == "⧉" {
+			if /*o.RagReferences &&*/ string(chunk) == "⧉" {
 				startRefrences = true
 				return nil
 			}
