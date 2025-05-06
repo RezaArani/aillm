@@ -38,10 +38,13 @@ It offers seamless **compatibility with OLLAMA and OpenAI**, making it an excell
 
   
 
-5.  **Scalability**
+5.  **Memory Management**
 
 - Leverages Redis and efficient text processing pipelines to scale with large datasets.
+- **Memory Summarization** for condensing long conversation histories.
+- Vector search for retrieving relevant past interactions.
 
+  
 
 ## **Configuration**
 Configure environment variables in `.env` file:
@@ -136,17 +139,55 @@ Our project has been launched since 2023 in Portugal.
 `
 ```
 
+## **Image Description Example**
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	aillm "github.com/RezaArani/aillm/controller"
+)
+
+func main() {
+	// Initialize with a vision-capable model
+	llmclient := &aillm.OpenAIController{
+		Config: aillm.LLMConfig{
+			Apiurl:   "https://api.openai.com/v1",
+			AiModel:  "gpt-4-vision-preview",
+			APIToken: "your-openai-api-token",
+		},
+	}
+	
+	llm := aillm.LLMContainer{
+		VisionClient: llmclient,
+	}
+	
+	llm.Init()
+	
+	// Describe an image from a file
+	response, err := llm.DescribeImageFromFile("path/to/your/image.jpg", "What can you see in this image?")
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	
+	fmt.Println("Image Description:", response.Choices[0].Message.Content)
+}
+```
+
 ## **TODO**
 - Implement **parallelism** to optimize processing efficiency.
-- Improve **context management** to enhance memory retention and retrieval capabilities.
 - Enhance the chatbot integration by supporting additional LLM models.
 - Dockerized version with Reset Service and Websocket web server.
 
-### 📢 Recent Updates  
+### 📢 Recent Updates in v1.2.2
 
-* User Memory Summarization
-
-* We have introduced a new feature that enables **image description using AI models** with just a few lines of code! 🎉 Now, you can effortlessly generate **detailed textual descriptions of images** by simply passing an image file and a text query to the model. The integration is seamless, requiring minimal setup while leveraging **powerful vision models** to analyze and interpret images. Check out the `DescribeImage` and `DescribeImageFromFile` functions to get started! 🚀
+* **Memory Summarization** - Conversations are now automatically summarized for more efficient context management
+* **Vision Support Improvements** - Enhanced image description capabilities with better error handling and mime type detection
+* **User Memory Management** - Improved persistent memory with Redis TTL and vector similarity search for related conversations
+* **Performance Optimizations** - Reduced token usage and improved response times
 
 ## **License**
 This project is licensed under the **Apache License, Version 2.0**.
