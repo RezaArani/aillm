@@ -557,6 +557,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 		llms.WithTemperature(llm.Temperature),
 		llms.WithTopP(llm.TopP),
 		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			fmt.Println("chunk:", string(chunk))
 			totalTokens++
 			if isFirstChunk {
 				isFirstChunk = false
