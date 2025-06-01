@@ -575,24 +575,29 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 				result.addAction("First Chunk Received", o.ActionCallFunc)
 			}
 			if isFirstWord && len(chunk) > 0 {
-				startsWithAt := chunk[0] == 64
+				startsWithAt := strings.HasPrefix(string(chunk), "@")
 				if startsWithAt {
 
 					failedToRespond = true
-				}
-				isFirstWord = isFirstWord && chunk[0] != 32
-				if isFirstWord && startsWithAt {
+					// remove @ from the chunk
 					chunk = chunk[1:]
 				}
+				isFirstWord = false
+				// isFirstWord = isFirstWord && !strings.Contains(string(chunk), " ")
+				// if isFirstWord && startsWithAt {
+				// 	chunk = chunk[1:]
+				// }
+			}
+			if /*o.RagReferences &&*/ strings.HasPrefix(string(chunk), "⧉") {
+				startRefrences = true
+				chunk = []byte(strings.Replace(string(chunk), "⧉", "", 1))
+
 			}
 			if o.RagReferences && startRefrences {
 				refrencesStr += string(chunk)
 				return nil
 			}
-			if /*o.RagReferences &&*/ string(chunk) == "⧉" {
-				startRefrences = true
-				return nil
-			}
+
 			if o.StreamingFunc == nil {
 				return nil
 			}
@@ -681,11 +686,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 			msgs,
 			calloptions...,
 		)
-		result.addAction("Sending Request to LLM", o.ActionCallFunc)
-		response, err = llmclient.GenerateContent(ctx,
-			msgs,
-			calloptions...,
-		)
+
 		if err != nil {
 			return result, err
 		}
