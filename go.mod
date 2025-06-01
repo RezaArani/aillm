@@ -8,7 +8,7 @@ require (
 	github.com/google/go-tika v0.3.1
 	github.com/ledongthuc/pdf v0.0.0-20220302134840-0c2507a12d80
 	github.com/redis/go-redis/v9 v9.7.0
-	github.com/tmc/langchaingo v0.1.12
+	github.com/tmc/langchaingo v0.1.13
 )
 
 require (

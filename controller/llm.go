@@ -157,8 +157,16 @@ func (llm *LLMContainer) GetQueryLanguage(Query, sessionId string, languageChann
 	if langErr != nil {
 		return "", tokenReport, langErr
 	}
-
-	return langResponse.Choices[0].Content, tokenReport, nil
+	language := langResponse.Choices[0].Content
+	switch strings.ToLower(language) {
+	case "none":
+		language = "English"
+	case "portuguese":
+		language = "European Portuguese (pt-PT)"
+	case "pt":
+		language = "European Portuguese (pt-PT)"
+	}
+	return language, tokenReport, nil
 
 }
 func (llm *LLMContainer) setupResponseLanguage(Query, SessionId string, languageChannel chan<- string) (languageCapabilityDetectionFunction, languageCapabilityDetectionText string, LanguageDetectionTokens TokenUsage) {
@@ -595,12 +603,29 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 	if len(o.Tools.Tools) > 0 {
 		result.addAction("Calling tools", o.ActionCallFunc)
 
-		messageHistory := []llms.MessageContent{
-			llms.TextParts(llms.ChatMessageTypeHuman, memoryStr),
-		}
+		messageHistory := []llms.MessageContent{}
+
+		// if memoryStr != "" {
+		// 	messageHistory = append(messageHistory, llms.TextParts(llms.ChatMessageTypeSystem, memoryStr))
+		// }
+
+		messageHistory = append(messageHistory, llms.TextParts(llms.ChatMessageTypeHuman, Query))
+		// 		messageHistory = append(messageHistory, llms.TextParts(llms.ChatMessageTypeSystem, `You are an expert in composing functions. You are given a question and a set of possible functions.
+		// Based on the question, you will need to make one or more function/tool calls to achieve the purpose.
+		// If none of the functions can be used, point it out. If the given question lacks the parameters required by the function, also point it out. You should only return the function call in tools call sections.
+
+		// If you decide to invoke any of the function(s), you MUST put it in the format of [func_name1(params_name1=params_value1, params_name2=params_value2...), func_name2(params)]
+		// You SHOULD NOT include any other text in the response.
+
+		// Here is a list of functions in JSON format that you can invoke.
+
+		// `))
+
+		// calloptions = append(calloptions, llms.WithTools(o.Tools.Tools))
 
 		// Token usage calculation should be done here
-		resp, err := llmclient.GenerateContent(ctx, messageHistory, llms.WithTools(o.Tools.Tools))
+
+		resp, err := llmclient.GenerateContent(ctx, messageHistory, llms.WithTools(o.Tools.Tools), llms.WithStreamingFunc(o.StreamingFunc))
 		if err != nil {
 			return result, err
 
@@ -611,7 +636,8 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 		for _, tc := range respchoice.ToolCalls {
 			assistantResponse.Parts = append(assistantResponse.Parts, tc)
 		}
-		messageHistory = append(messageHistory, assistantResponse)
+		// messageHistory = append(messageHistory, assistantResponse)
+		msgs = append(msgs, assistantResponse)
 
 		for _, tc := range respchoice.ToolCalls {
 			if o.Tools.Handlers[tc.FunctionCall.Name] != nil {
@@ -626,41 +652,43 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 				}
 				toolResponse := llms.MessageContent{
 					Role: llms.ChatMessageTypeTool,
+
 					Parts: []llms.ContentPart{
 						llms.ToolCallResponse{
-							Name:    tc.FunctionCall.Name,
-							Content: fnresult,
+							ToolCallID: tc.ID,
+							Name:       tc.FunctionCall.Name,
+							Content:    fnresult,
 						},
 					},
 				}
 
-				messageHistory = append(messageHistory, toolResponse)
+				msgs = append(msgs, toolResponse)
 			}
 		}
+		// calloptions = append(calloptions, llms.WithTools(o.Tools.Tools))
 
-		// response, err = llmclient.GenerateContent(ctx,
-		// 	msgs,
-		// 	calloptions...,
-		// )
-		// if err != nil {
-		// 	return result, err
-		// }
+		response, err = llmclient.GenerateContent(ctx,
+			msgs,
+			calloptions...,
+		)
+		if err != nil {
+			return result, err
+		}
 
-	}
-	// else {
-	// 	result.addAction("Sending Request to LLM", o.ActionCallFunc)
-	// 	response, err = llmclient.GenerateContent(ctx,
-	// 		msgs,
-	// 		calloptions...,
-	// 	)
-	// }
-	result.addAction("Sending Request to LLM", o.ActionCallFunc)
-	response, err = llmclient.GenerateContent(ctx,
-		msgs,
-		calloptions...,
-	)
-	if err != nil {
-		return result, err
+	} else {
+		result.addAction("Sending Request to LLM", o.ActionCallFunc)
+		response, err = llmclient.GenerateContent(ctx,
+			msgs,
+			calloptions...,
+		)
+		result.addAction("Sending Request to LLM", o.ActionCallFunc)
+		response, err = llmclient.GenerateContent(ctx,
+			msgs,
+			calloptions...,
+		)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	result.addAction("Finished", o.ActionCallFunc)
