@@ -182,8 +182,8 @@ func main() {
 - Enhance the chatbot integration by supporting additional LLM models.
 - Dockerized version with Reset Service and Websocket web server.
 
-### 📢 Recent Updates in v1.2.2
-
+### 📢 Recent Updates in v1.2.7
+* **Llama-4-Maverick** - Llama-4-Maverick compatibility 
 * **Memory Summarization** - Conversations are now automatically summarized for more efficient context management
 * **Vision Support Improvements** - Enhanced image description capabilities with better error handling and mime type detection
 * **User Memory Management** - Improved persistent memory with Redis TTL and vector similarity search for related conversations
