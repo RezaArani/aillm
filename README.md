@@ -182,7 +182,11 @@ func main() {
 - Enhance the chatbot integration by supporting additional LLM models.
 - Dockerized version with Reset Service and Websocket web server.
 
-### 📢 Recent Updates in v1.2.7
+### 📢 Recent Updates in v.1.2.8
+* **Guard prompt** - 🔐 A lightweight guard‑prompt toolkit that prepends a security layer to block jailbreaks, prompt injection, unauthorized code execution, and data leaks before processing user input.
+
+
+### 📢 Updates in v1.2.7
 * **Llama-4-Maverick** - Llama-4-Maverick compatibility 
 * **Memory Summarization** - Conversations are now automatically summarized for more efficient context management
 * **Vision Support Improvements** - Enhanced image description capabilities with better error handling and mime type detection

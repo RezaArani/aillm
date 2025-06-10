@@ -141,7 +141,6 @@ func (o *LLMCallOptions) getEmbeddingPrefix() string {
 	return o.Prefix
 }
 
- 
 // WithEmbeddingPrefix specifies a prefix for identifying related embeddings.
 //
 // Parameters:
@@ -207,7 +206,6 @@ func (llm *LLMContainer) WithMaxTokens(maxTokens int) LLMCallOption {
 	}
 }
 
-
 // WithLanguageChannel returns user language and send it to main thread
 //
 // Parameters:
@@ -217,10 +215,9 @@ func (llm *LLMContainer) WithMaxTokens(maxTokens int) LLMCallOption {
 //   - LLMCallOption: An option that sets the query language.
 func (llm *LLMContainer) WithLanguageChannel(userChannel chan string) LLMCallOption {
 	return func(o *LLMCallOptions) {
-		o.LanguageChannel = userChannel 
+		o.LanguageChannel = userChannel
 	}
 }
-
 
 // WithForcedLanguage Forces ExactPrompt output language
 //
@@ -231,10 +228,9 @@ func (llm *LLMContainer) WithLanguageChannel(userChannel chan string) LLMCallOpt
 //   - LLMCallOption: An option that sets the query language.
 func (llm *LLMContainer) WithForcedLanguage(forceUserLanguage bool) LLMCallOption {
 	return func(o *LLMCallOptions) {
-		o.ForceLanguage = forceUserLanguage 
+		o.ForceLanguage = forceUserLanguage
 	}
 }
-
 
 // WithAllowHallucinate allows model to hallucinate
 //
@@ -249,7 +245,6 @@ func (llm *LLMContainer) WithAllowHallucinate(AllowHallucinate bool) LLMCallOpti
 	}
 }
 
-
 // WithForceLLMToAnswerLong forces LLM to answer long
 //
 // Parameters:
@@ -262,8 +257,6 @@ func (llm *LLMContainer) WithForceLLMToAnswerLong(forceLong bool) LLMCallOption 
 		o.ForceLLMToAnswerLong = forceLong
 	}
 }
-
-
 
 // WithLLMSpliter uses LLM to split text
 //
@@ -278,9 +271,6 @@ func (llm *LLMContainer) WithLLMSpliter(UseLLMToSplitText bool) LLMCallOption {
 	}
 }
 
-
-
-
 // WithIncludeDate include date in prompt
 //
 // Parameters:
@@ -293,7 +283,6 @@ func (llm *LLMContainer) WithIncludeDate(IncludeDate bool) LLMCallOption {
 		o.IncludeDate = IncludeDate
 	}
 }
-
 
 // WithIncludeDate include date in prompt
 //
@@ -308,10 +297,29 @@ func (llm *LLMContainer) WithRagReferences(RagReferences bool) LLMCallOption {
 	}
 }
 
-
-// Experimental
+// WithTools specifies the tools to use for the query.
+//
+// Parameters:
+//   - tools: A list of tools to use for the query.
+//
+// Returns:
+//   - LLMCallOption: An option that sets the tools.
+// Experimental - Just works with OpenAI
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		o.Tools = tools
+	}
+}
+
+// WithSearchAlgorithm specifies the search algorithm to use for the query.
+//
+// Parameters:
+//   - SearchAlgorithm: The search algorithm to use for the query.
+//
+// Returns:
+//   - LLMCallOption: An option that sets the search algorithm.
+func (llm *LLMContainer) WithSearchAlgorithm(SearchAlgorithm int) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.SearchAlgorithm = SearchAlgorithm
 	}
 }

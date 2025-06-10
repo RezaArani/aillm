@@ -317,8 +317,14 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			return result, err
 		}
 		// Add AI assistant's character/personality setting
-		if llm.Character != "" {
-			msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, llm.Character))
+		character := ""
+		if o.character != "" {
+			character = o.character
+		} else {
+			character = llm.Character
+		}
+		if character == "" {
+			character = "an AI assistant"
 		}
 		// Construct the query prefix for the embedding store
 		KNNPrefix := "context:"
@@ -358,38 +364,20 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 
 		/*** Change algorithm to The k-nearest neighbors (KNN) algorithm **/
 		var KNNGetErr error
-
-		switch llm.SearchAlgorithm {
-		case SimilaritySearch:
-			// Retrieve related documents using cosine similarity search
-
-			resDocs, KNNGetErr = llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
-		case KNearestNeighbors:
-			// Retrieve related documents using KNN search
-			resDocs, KNNGetErr = llm.FindKNN(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
-		default:
-			return result, errors.New("unknown search algorithm")
+		searchAlgorithm := o.SearchAlgorithm
+		if searchAlgorithm == NotDefinedSearch {
+			searchAlgorithm = llm.SearchAlgorithm
 		}
+		if searchAlgorithm != NoSearch {
+			switch searchAlgorithm {
 
-		if KNNGetErr != nil {
-			if !llm.AllowHallucinate && !o.AllowHallucinate {
-				return result, KNNGetErr
-			}
-		}
-		// Check if relevant documents were retrieved
-		hasRag = len(resDocs) > 0
-
-		if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
-			searchPrefix := o.getEmbeddingPrefix() + ":" + llm.FallbackLanguage + ":"
-			if o.searchAll {
-				// o.Prefix =
-				searchPrefix = "all:" + o.Prefix + ":" + llm.FallbackLanguage + ":"
-			}
-			switch llm.SearchAlgorithm {
 			case SimilaritySearch:
-				resDocs, KNNGetErr = llm.CosineSimilarity(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				// Retrieve related documents using cosine similarity search
+
+				resDocs, KNNGetErr = llm.CosineSimilarity(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 			case KNearestNeighbors:
-				resDocs, KNNGetErr = llm.FindKNN(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				// Retrieve related documents using KNN search
+				resDocs, KNNGetErr = llm.FindKNN(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 			default:
 				return result, errors.New("unknown search algorithm")
 			}
@@ -397,6 +385,30 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			if KNNGetErr != nil {
 				if !llm.AllowHallucinate && !o.AllowHallucinate {
 					return result, KNNGetErr
+				}
+			}
+			// Check if relevant documents were retrieved
+			hasRag = len(resDocs) > 0
+
+			if !hasRag && llm.FallbackLanguage != "" && llm.FallbackLanguage != o.Language {
+				searchPrefix := o.getEmbeddingPrefix() + ":" + llm.FallbackLanguage + ":"
+				if o.searchAll {
+					// o.Prefix =
+					searchPrefix = "all:" + o.Prefix + ":" + llm.FallbackLanguage + ":"
+				}
+				switch llm.SearchAlgorithm {
+				case SimilaritySearch:
+					resDocs, KNNGetErr = llm.CosineSimilarity(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				case KNearestNeighbors:
+					resDocs, KNNGetErr = llm.FindKNN(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				default:
+					return result, errors.New("unknown search algorithm")
+				}
+
+				if KNNGetErr != nil {
+					if !llm.AllowHallucinate && !o.AllowHallucinate {
+						return result, KNNGetErr
+					}
 				}
 			}
 		}
@@ -437,7 +449,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		if !hasRag && o.ExtraContext == "" {
 			if !llm.AllowHallucinate && !o.AllowHallucinate {
 				if llm.NoRagErrorMessage != "" {
-					ragText = languageCapabilityDetectionFunction + `You are an AI assistant specialized in providing accurate and concise answers.
+					ragText = languageCapabilityDetectionFunction + `You are ` + character + ` specialized in providing accurate and concise answers.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
 - Start the response with "@".
 - Ignore all of the references and do not include them in the response.
@@ -454,26 +466,33 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 						memoryStr = MemorySummary + "\n" + memoryStr
 					}
 
-					memStrPrompt := `**Previous Interactions:**  
+					memStrPrompt := `### Previous Interactions:  
 ` + memoryStr
-					ragText = fmt.Sprintf(`You are a %s AI assistant specialized in providing accurate and concise answers based on the following knowledge:
-**Contextual Knowledge:**
+					ragText = fmt.Sprintf(`You are %s in providing accurate and concise answers based on the following knowledge:
+### Contextual Knowledge:
 %s
-**Instructions:** 
+### Instructions: 
 - Analyze the question carefully and reason step-by-step.
 - Then, provide a **clear answer `+brieflyText+`in %s.**.
 - If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
 **"I can't find any answer regarding your question."**. Do not forget to add **@** at the start of the response in case of unanswerable question.
 - Do **not** reference the original text or mention language/translation details.
 %s
-**User:** %s
+
+**User:** 
+%s
 **Assistant:** `,
-						o.character, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, Query)
+						character, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, Query)
 					ragArray = append(ragArray, llms.TextPart(ragText))
 					curMessageContent.Parts = ragArray
 					curMessageContent.Role = llms.ChatMessageTypeSystem
 					msgs = append(msgs, curMessageContent)
 
+				} else {
+					if o.IncludeDate {
+						ragText = languageCapabilityDetectionFunction + "You are " + character + " specialized in providing accurate and concise answers.\n" + datePrompt + "\nAssistant: "
+						msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeSystem, ragText))
+					}
 				}
 			}
 		} else {
@@ -515,16 +534,16 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 			ragText += "\n" + o.ExtraContext
 			memStrPrompt := ""
 			if memoryStr != "" {
-				memStrPrompt = `**Previous Interactions:**  
+				memStrPrompt = `### Previous Interactions:  
 ` + memoryStr
 			}
 			ragText = fmt.Sprintf(`You are a %s AI assistant specialized in providing accurate and concise answers based on the following knowledge:
-**Contextual Knowledge:**			
+### Contextual Knowledge:			
 %s
 
 %s
 
-**Instructions:**
+### Instructions:
 - Analyze the question carefully and reason step-by-step and think about the question and answer first.
 - Then, provide a **clear answer `+brieflyText+` in %s.**.
 - If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
@@ -536,9 +555,11 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 %s
 %s
 
-**User:** %s
+**User:** 
+%s
 **Assistant:** `,
-				o.character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
+				character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
+			fmt.Println(ragText)
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
@@ -546,7 +567,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 
 		}
 
-		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
+		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query+SecurityCheckPrompt))
 		memoryAddAllowed = hasRag || llm.AllowHallucinate
 	} else {
 		if o.ForceLanguage {

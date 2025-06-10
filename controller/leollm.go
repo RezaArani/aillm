@@ -137,6 +137,7 @@ type LLMCallOptions struct {
 	UseLLMToSplitText     bool
 	IncludeDate           bool
 	RagReferences         bool
+	SearchAlgorithm       int
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.
@@ -173,8 +174,11 @@ type RedisClient struct {
 }
 
 const (
+	NotDefinedSearch  = 0 //
 	SimilaritySearch  = 1 //
 	KNearestNeighbors = 2 //
+	NoSearch          = 3 //
+
 )
 
 // LLMContainer serves as the main struct that manages LLM operations, embedding configurations, and data storage.
