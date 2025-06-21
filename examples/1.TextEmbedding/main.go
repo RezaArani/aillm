@@ -25,31 +25,31 @@ func main() {
 			Host: "localhost:6379",
 		},
 	}
-	
+
 	llm.Init()
 	// asking question without context
 	askKLLM(llm, "What is SemMapas?")
 	// let's embed some data
 	log.Println("Embedding:")
 	embedd(llm)
-	
+
 	// Time for asking some questions
 	askKLLM(llm, "What is SemMapas?")
 	askKLLM(llm, "Where did it launched?")
 	// Now removing embedded data and asking the same question, result should be I'm unable to provide a specific location regarding the launch of SemMapas as I don't have sufficient information on this topic.
 	llm.RemoveEmbedding("")
 	// Asking the same question again
-	
+
 }
 
-func askKLLM(llm aillm.LLMContainer,query string) {
+func askKLLM(llm aillm.LLMContainer, query string) {
 	log.Println("LLM Reply to " + query + ":")
 	_, err := llm.AskLLM(query, llm.WithStreamingFunc(print))
- 	if err != nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 }
- 
+
 func embedd(llm aillm.LLMContainer) {
 	// Text Embedding
 	contents := aillm.LLMEmbeddingContent{
@@ -59,7 +59,7 @@ func embedd(llm aillm.LLMContainer) {
 }
 
 func print(ctx context.Context, chunk []byte) error {
-	fmt.Print(string(chunk))
+	fmt.Println(string(chunk))
 	return nil
 }
 

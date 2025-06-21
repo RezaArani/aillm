@@ -239,6 +239,25 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	if o.Index == "" {
 		o.searchAll = true
 	}
+
+	brieflyText := "briefly "
+	if o.ForceLLMToAnswerLong {
+		brieflyText = ""
+	}
+
+	SecurityCheckTokens := TokenUsage{}
+
+	if !o.ignoreSecurityCheck && o.ExactPrompt == "" {
+		var isSecure bool
+		var err error
+		isSecure, SecurityCheckTokens, err = llm.IsQuerySafe(Query)
+		if err != nil {
+			return result, err
+		}
+		if !isSecure {
+			return result, errors.New("query is not secure")
+		}
+	}
 	result.addAction("Start Calling LLM", o.ActionCallFunc)
 	memoryStr := ""
 	KNNMemoryStr := ""
@@ -440,10 +459,6 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			}
 		}
 
-		brieflyText := "briefly "
-		if o.ForceLLMToAnswerLong {
-			brieflyText = ""
-		}
 		// If no relevant documents found, handle response accordingly
 
 		if !hasRag && o.ExtraContext == "" {
@@ -559,7 +574,6 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 %s
 **Assistant:** `,
 				character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
-			fmt.Println(ragText)
 			ragArray = append(ragArray, llms.TextPart(ragText))
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
@@ -567,7 +581,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 
 		}
 
-		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query+SecurityCheckPrompt))
+		msgs = append(msgs, llms.TextParts(llms.ChatMessageTypeHuman, Query))
 		memoryAddAllowed = hasRag || llm.AllowHallucinate
 	} else {
 		if o.ForceLanguage {
@@ -756,6 +770,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 		}
 	}
 	result.TokenReport.CompletionTokens.OutputTokens = totalTokens
+	result.TokenReport.SecurityCheckTokens = SecurityCheckTokens
 	result = LLMResult{
 		Prompt:          msgs,
 		Response:        response,

@@ -323,3 +323,16 @@ func (llm *LLMContainer) WithSearchAlgorithm(SearchAlgorithm int) LLMCallOption 
 		o.SearchAlgorithm = SearchAlgorithm
 	}
 }
+
+// WithIgnoreSecurityCheck ignores security check
+//
+// Parameters:
+//   - IgnoreSecurityCheck: A boolean value to update property
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithIgnoreSecurityCheck(ignoreSecurityCheck bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.ignoreSecurityCheck = ignoreSecurityCheck
+	}
+}

@@ -92,6 +92,7 @@ type TokenReport struct {
 	TextChunkingTokens        TokenUsage
 	LanguageDetectionTokens   TokenUsage
 	MemorySummarizationTokens TokenUsage
+	SecurityCheckTokens       TokenUsage
 }
 
 type llmReference struct {
@@ -138,6 +139,7 @@ type LLMCallOptions struct {
 	IncludeDate           bool
 	RagReferences         bool
 	SearchAlgorithm       int
+	ignoreSecurityCheck   bool
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.
