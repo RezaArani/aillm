@@ -117,33 +117,34 @@ type LLMCallOption func(*LLMCallOptions)
 type LLMCallOptions struct {
 	// StreamingFunc is a function to be called for each chunk of a streaming response.
 	// Return an error to stop streaming early.
-	StreamingFunc         func(ctx context.Context, chunk []byte) error `json:"-"`
-	ActionCallFunc        func(action LLMAction)                        `json:"-"`
-	Prefix                string
-	Index                 string
-	Language              string
-	SessionID             string
-	ExtraContext          string
-	ExactPrompt           string
-	searchAll             bool
-	LimitGeneralEmbedding bool
-	CotextCleanup         bool
-	character             string
-	PersistentMemory      bool
-	MaxTokens             int
-	LanguageChannel       chan<- string
-	ForceLanguage         bool
-	AllowHallucinate      bool
-	Tools                 AillmTools
-	ForceLLMToAnswerLong  bool
-	UseLLMToSplitText     bool
-	IncludeDate           bool
-	RagReferences         bool
-	SearchAlgorithm       int
-	ignoreSecurityCheck   bool
-	debug                 bool
-	maxWords              int
-	customModel           string
+	StreamingFunc            func(ctx context.Context, chunk []byte) error `json:"-"`
+	ActionCallFunc           func(action LLMAction)                        `json:"-"`
+	Prefix                   string
+	Index                    string
+	Language                 string
+	SessionID                string
+	ExtraContext             string
+	ExactPrompt              string
+	searchAll                bool
+	LimitGeneralEmbedding    bool
+	CotextCleanup            bool
+	character                string
+	PersistentMemory         bool
+	MaxTokens                int
+	LanguageChannel          chan<- string
+	ForceLanguage            bool
+	AllowHallucinate         bool
+	Tools                    AillmTools
+	ForceLLMToAnswerLong     bool
+	UseLLMToSplitText        bool
+	IncludeDate              bool
+	RagReferences            bool
+	SearchAlgorithm          int
+	ignoreSecurityCheck      bool
+	debug                    bool
+	maxWords                 int
+	customModel              string
+	asyncMemorySummarization bool
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.

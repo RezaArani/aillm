@@ -789,11 +789,15 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 
 			} else {
 				//persistent memory
-				tokenUsage, err := llm.PersistentMemoryManager.AddMemory(o.SessionID, queryData)
-				if err != nil {
-					return result, err
+				// disabling async memory summarization could result in a delay in the response but it provides token usage statistics
+				if o.asyncMemorySummarization {
+					go storePersistentMemory(llm, o, queryData, result)
+				} else {
+					llmResult, summarazationErr := storePersistentMemory(llm, o, queryData, result)
+					if summarazationErr != nil {
+						return llmResult, summarazationErr
+					}
 				}
-				result.TokenReport.MemorySummarizationTokens = tokenUsage
 
 			}
 		}
@@ -824,6 +828,15 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 		result.LLMReferences = refrencesArray.References
 	}
 	return result, err
+}
+
+func storePersistentMemory(llm *LLMContainer, o LLMCallOptions, queryData MemoryData, result LLMResult) (LLMResult, error) {
+	tokenUsage, err := llm.PersistentMemoryManager.AddMemory(o.SessionID, queryData)
+	if err != nil {
+		return result, err
+	}
+	result.TokenReport.MemorySummarizationTokens = tokenUsage
+	return LLMResult{}, nil
 }
 
 func extractMemoryData(input string) MemoryData {

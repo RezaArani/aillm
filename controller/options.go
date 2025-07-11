@@ -405,3 +405,16 @@ func (llm *LLMContainer) WithCustomModel(customModel string) LLMCallOption {
 		o.customModel = customModel
 	}
 }
+
+// WithAsyncMemorySummarization specifies the async memory summarization.
+//
+// Parameters:
+//   - asyncMemorySummarization: boolean value of async memory summarization
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithAsyncMemorySummarization(asyncMemorySummarization bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.asyncMemorySummarization = asyncMemorySummarization
+	}
+}
