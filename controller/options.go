@@ -304,6 +304,7 @@ func (llm *LLMContainer) WithRagReferences(RagReferences bool) LLMCallOption {
 //
 // Returns:
 //   - LLMCallOption: An option that sets the tools.
+//
 // Experimental - Just works with OpenAI
 func (llm *LLMContainer) WithTools(tools AillmTools) LLMCallOption {
 	return func(o *LLMCallOptions) {
@@ -334,5 +335,73 @@ func (llm *LLMContainer) WithSearchAlgorithm(SearchAlgorithm int) LLMCallOption 
 func (llm *LLMContainer) WithIgnoreSecurityCheck(ignoreSecurityCheck bool) LLMCallOption {
 	return func(o *LLMCallOptions) {
 		o.ignoreSecurityCheck = ignoreSecurityCheck
+	}
+}
+
+// WithHybridSearch enables hybrid search combining vector similarity and lexical search
+func (llm *LLMContainer) WithHybridSearch() LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.SearchAlgorithm = HybridSearch
+	}
+}
+
+// WithLexicalSearch enables lexical/keyword search only
+func (llm *LLMContainer) WithLexicalSearch() LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.SearchAlgorithm = LexicalSearch
+	}
+}
+
+// WithSemanticSearch enables enhanced semantic search (auto-selects best algorithm)
+func (llm *LLMContainer) WithSemanticSearch() LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.SearchAlgorithm = SemanticSearch
+	}
+}
+
+// WithSimilaritySearch enables cosine similarity search (default)
+func (llm *LLMContainer) WithSimilaritySearch() LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.SearchAlgorithm = SimilaritySearch
+	}
+}
+
+// WithKNNSearch enables K-Nearest Neighbors search
+func (llm *LLMContainer) WithKNNSearch() LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.SearchAlgorithm = KNearestNeighbors
+	}
+}
+
+// WithDebug enables debug mode
+func (llm *LLMContainer) WithDebug(debug bool) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.debug = debug
+	}
+}
+
+// WithMaxWords specifies the maximum words of response.
+//
+// Parameters:
+//   - maxTokens: integer value of Maximum allowed tokens
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithMaxWords(maxWords int) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.maxWords = maxWords
+	}
+}
+
+// WithCustomModel specifies the custom mode of response.
+//
+// Parameters:
+//   - maxTokens: integer value of Maximum allowed tokens
+//
+// Returns:
+//   - LLMCallOption: An option that sets the query language.
+func (llm *LLMContainer) WithCustomModel(customModel string) LLMCallOption {
+	return func(o *LLMCallOptions) {
+		o.customModel = customModel
 	}
 }

@@ -62,6 +62,7 @@ type LLMResult struct {
 	LLMReferences   []string
 	TokenReport     TokenReport
 	FailedToRespond bool
+	Warning         string
 }
 
 // TokenUsage represents the usage of tokens in a specific context.
@@ -140,6 +141,9 @@ type LLMCallOptions struct {
 	RagReferences         bool
 	SearchAlgorithm       int
 	ignoreSecurityCheck   bool
+	debug                 bool
+	maxWords              int
+	customModel           string
 }
 
 // LLMClient defines an interface for creating a new LLM (Large Language Model) client instance.
@@ -176,10 +180,13 @@ type RedisClient struct {
 }
 
 const (
-	NotDefinedSearch  = 0 //
-	SimilaritySearch  = 1 //
-	KNearestNeighbors = 2 //
-	NoSearch          = 3 //
+	NotDefinedSearch  = 0 // Default search - will use system default
+	SimilaritySearch  = 1 // Cosine similarity search only
+	KNearestNeighbors = 2 // K-Nearest Neighbors search only
+	NoSearch          = 3 // No search performed
+	HybridSearch      = 4 // Hybrid search (vector + lexical search with RRF)
+	LexicalSearch     = 5 // Lexical/keyword search only
+	SemanticSearch    = 6 // Enhanced semantic search (auto-selects best algorithm)
 
 )
 

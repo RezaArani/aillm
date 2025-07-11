@@ -250,13 +250,25 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 	if !o.ignoreSecurityCheck && o.ExactPrompt == "" {
 		var isSecure bool
 		var err error
-		isSecure, SecurityCheckTokens, err = llm.IsQuerySafe(Query)
+		var warning string
+		isSecure, SecurityCheckTokens, warning, err = llm.IsQuerySafe(Query, o.debug)
 		if err != nil {
 			return result, err
 		}
 		if !isSecure {
+			if o.debug && warning != "" {
+				result.Warning = warning
+			}
 			return result, errors.New("query is not secure")
+
 		}
+		if warning != "" {
+			result.Warning = warning
+		}
+	}
+	maxWordsPrompt := ""
+	if o.maxWords > 0 {
+		maxWordsPrompt = "\n- You should answer in " + strconv.Itoa(o.maxWords) + " words or less."
 	}
 	result.addAction("Start Calling LLM", o.ActionCallFunc)
 	memoryStr := ""
@@ -397,6 +409,15 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 			case KNearestNeighbors:
 				// Retrieve related documents using KNN search
 				resDocs, KNNGetErr = llm.FindKNN(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			case HybridSearch:
+				// Retrieve related documents using hybrid search (vector + lexical)
+				resDocs, KNNGetErr = llm.HybridSearch(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold, nil)
+			case LexicalSearch:
+				// Retrieve related documents using lexical search only
+				resDocs, KNNGetErr = llm.performLexicalSearchOnly(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+			case SemanticSearch:
+				// Retrieve related documents using enhanced semantic search
+				resDocs, KNNGetErr = llm.SemanticSearch(KNNPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 			default:
 				return result, errors.New("unknown search algorithm")
 			}
@@ -415,11 +436,17 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 					// o.Prefix =
 					searchPrefix = "all:" + o.Prefix + ":" + llm.FallbackLanguage + ":"
 				}
-				switch llm.SearchAlgorithm {
+				switch searchAlgorithm {
 				case SimilaritySearch:
 					resDocs, KNNGetErr = llm.CosineSimilarity(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 				case KNearestNeighbors:
 					resDocs, KNNGetErr = llm.FindKNN(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				case HybridSearch:
+					resDocs, KNNGetErr = llm.HybridSearch(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold, nil)
+				case LexicalSearch:
+					resDocs, KNNGetErr = llm.performLexicalSearchOnly(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
+				case SemanticSearch:
+					resDocs, KNNGetErr = llm.SemanticSearch(searchPrefix, KNNQuery, llm.RagRowCount, llm.ScoreThreshold)
 				default:
 					return result, errors.New("unknown search algorithm")
 				}
@@ -466,7 +493,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 				if llm.NoRagErrorMessage != "" {
 					ragText = languageCapabilityDetectionFunction + `You are ` + character + ` specialized in providing accurate and concise answers.
 your only answer to all of questions is the improved version of "` + llm.NotRelatedAnswer + `" in ` + languageCapabilityDetectionText + `.
-- Start the response with "@".
+- Start the response with "@" and "@" should be the first character of the response.
 - Ignore all of the references and do not include them in the response.
 **Assistant:** `
 
@@ -490,7 +517,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 - Analyze the question carefully and reason step-by-step.
 - Then, provide a **clear answer `+brieflyText+`in %s.**.
 - If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
-**"I can't find any answer regarding your question."**. Do not forget to add **@** at the start of the response in case of unanswerable question.
+**"@I can't find any answer regarding your question."**.
 - Do **not** reference the original text or mention language/translation details.
 %s
 
@@ -560,7 +587,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 
 ### Instructions:
 - Analyze the question carefully and reason step-by-step and think about the question and answer first.
-- Then, provide a **clear answer `+brieflyText+` in %s.**.
+- Then, provide a **clear answer `+brieflyText+` in %s.**.%s
 - If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
 **"I can't find any answer regarding your question."**. Do not forget to add **@** at the start of the response in case of unanswerable question.
 - Do **not** reference the original text or mention language/translation details.
@@ -573,8 +600,9 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 **User:** 
 %s
 **Assistant:** `,
-				character, ragText, memStrPrompt, languageCapabilityDetectionText, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
+				character, ragText, memStrPrompt, languageCapabilityDetectionText, maxWordsPrompt, languageCapabilityDetectionText, datePrompt, ragReferencesPrompt, Query)
 			ragArray = append(ragArray, llms.TextPart(ragText))
+			// fmt.Println(ragText)
 			curMessageContent.Parts = ragArray
 			curMessageContent.Role = llms.ChatMessageTypeSystem
 			msgs = append(msgs, curMessageContent)
@@ -665,7 +693,16 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 
 		// Token usage calculation should be done here
 
-		resp, err := llmclient.GenerateContent(ctx, messageHistory, llms.WithTools(o.Tools.Tools), llms.WithStreamingFunc(o.StreamingFunc))
+		callParams := []llms.CallOption{
+			llms.WithTools(o.Tools.Tools),
+			llms.WithStreamingFunc(o.StreamingFunc),
+		}
+
+		if o.customModel != "" {
+			callParams = append(callParams, llms.WithModel(o.customModel))
+		}
+
+		resp, err := llmclient.GenerateContent(ctx, messageHistory, callParams...)
 		if err != nil {
 			return result, err
 
