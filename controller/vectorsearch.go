@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,7 +54,7 @@ func DefaultHybridSearchConfig() HybridSearchConfig {
 		LexicalWeight:   0.3,
 		MinVectorScore:  0.0,
 		MinLexicalScore: 0.0,
-		UseRRF:          true,
+		UseRRF:          false,
 		RRFConstant:     60.0,
 		MaxResults:      50,
 	}
@@ -312,15 +313,50 @@ func (llm *LLMContainer) performLexicalSearch(prefix, searchQuery string, maxRes
 	}
 
 	// Escape special characters in search query
-	escapedQuery := llm.escapeRedisSearchQuery(searchQuery)
 
 	// Perform FT.SEARCH query for lexical search
 	// Search in both content and title fields
-	searchExpression := fmt.Sprintf("(@PageContent:%s) | (@Title:%s)", escapedQuery, escapedQuery)
+	keywords := []string{}
+	lines := strings.Split(searchQuery, "\n")
+	for _, line := range lines {
+		// keywords = append(keywords, llm.escapeRedisSearchQuery(line))
+		re := regexp.MustCompile(`[ ,\.]+`)
+
+		// Split the text
+		words := re.Split(line, -1)
+		for _, word := range words {
+			if len(word) > 2 {
+				keywords = append(keywords, llm.escapeRedisSearchQuery(word))
+			}
+		}
+	}
+
+	for _, keyword := range keywords {
+		if len(searchQuery) > 0 {
+			searchQuery += " | "
+		}
+		searchQuery += fmt.Sprintf("(@content:*%s*)", keyword)
+	}
+
+	// if strings.Contains(searchQuery, "\n") {
+	// 	// convert each line to a separate redis "OR" query
+	// 	lines := strings.Split(searchQuery, "\n")
+	// 	query := ""
+	// 	for idx, line := range lines {
+	// 		searchExpression := fmt.Sprintf("(@content:*%s*)", llm.escapeRedisSearchQuery(line))
+	// 		if idx > 0 {
+	// 			query += " | "
+	// 		}
+	// 		query += searchExpression
+	// 	}
+	// 	searchQuery = query
+	// } else {
+	// 	searchQuery = fmt.Sprintf("(@content:*%s*)", llm.escapeRedisSearchQuery(searchQuery))
+	// }
 
 	searchResults, err := rdb.Do(ctx,
 		"FT.SEARCH", textIndexName,
-		searchExpression,
+		searchQuery,
 		"LIMIT", 0, maxResults,
 		"WITHSCORES").Result()
 
@@ -349,10 +385,7 @@ func (llm *LLMContainer) createTextIndex(indexName, prefix string) error {
 		"ON", "HASH",
 		"PREFIX", "1", "doc:"+prefix,
 		"SCHEMA",
-		"PageContent", "TEXT", "WEIGHT", "2.0",
-		"Title", "TEXT", "WEIGHT", "1.5",
-		"Keywords", "TEXT", "WEIGHT", "1.0",
-		"Source", "TEXT", "WEIGHT", "0.5").Result()
+		"content", "TEXT").Result()
 
 	return err
 }
@@ -360,32 +393,59 @@ func (llm *LLMContainer) createTextIndex(indexName, prefix string) error {
 // escapeRedisSearchQuery escapes special characters for Redis FT.SEARCH
 func (llm *LLMContainer) escapeRedisSearchQuery(query string) string {
 	// Replace special characters that have meaning in Redis FT.SEARCH
+	// replacements := map[string]string{
+	// 	"@":  "\\@",
+	// 	"(":  "\\(",
+	// 	")":  "\\)",
+	// 	"[":  "\\[",
+	// 	"]":  "\\]",
+	// 	"{":  "\\{",
+	// 	"}":  "\\}",
+	// 	"*":  "\\*",
+	// 	"+":  "\\+",
+	// 	"?":  "\\?",
+	// 	"|":  "\\|",
+	// 	"^":  "\\^",
+	// 	"$":  "\\$",
+	// 	"-":  "\\-",
+	// 	"=":  "\\=",
+	// 	"~":  "\\~",
+	// 	":":  "\\:",
+	// 	";":  "\\;",
+	// 	"!":  "\\!",
+	// 	"#":  "\\#",
+	// 	"%":  "\\%",
+	// 	"&":  "\\&",
+	// 	"'":  "\\'",
+	// 	"\"": "\\\"",
+	// 	"\\": "\\\\",
+	// }
+
 	replacements := map[string]string{
 		"@":  "\\@",
-		"(":  "\\(",
-		")":  "\\)",
-		"[":  "\\[",
-		"]":  "\\]",
-		"{":  "\\{",
-		"}":  "\\}",
-		"*":  "\\*",
-		"+":  "\\+",
-		"?":  "\\?",
-		"|":  "\\|",
-		"^":  "\\^",
-		"$":  "\\$",
-		"-":  "\\-",
-		"=":  "\\=",
-		"~":  "\\~",
-		":":  "\\:",
-		";":  "\\;",
-		"!":  "\\!",
-		"#":  "\\#",
-		"%":  "\\%",
-		"&":  "\\&",
-		"'":  "\\'",
-		"\"": "\\\"",
-		"\\": "\\\\",
+		"(":  "",
+		")":  "",
+		"[":  "",
+		"]":  "",
+		"{":  "",
+		"}":  "",
+		"*":  "",
+		"+":  "",
+		"?":  "",
+		"|":  "",
+		"^":  "",
+		"$":  "",
+		"-":  "",
+		"=":  "",
+		"~":  "",
+		":":  "",
+		";":  "",
+		"!":  "",
+		"#":  "",
+		"%":  "",
+		"&":  "",
+		"'":  "",
+		"\"": "",
 	}
 
 	escaped := query
@@ -400,42 +460,52 @@ func (llm *LLMContainer) escapeRedisSearchQuery(query string) string {
 func (llm *LLMContainer) parseRedisSearchResults(results interface{}, searchType string) ([]HybridSearchResult, error) {
 	var hybridResults []HybridSearchResult
 
-	resultSlice, ok := results.([]interface{})
-	if !ok || len(resultSlice) < 1 {
-		return hybridResults, nil
-	}
-
-	// First element is the total count
-	totalCount, ok := resultSlice[0].(int64)
+	// Handle the new Redis response format
+	resultMap, ok := results.(map[interface{}]interface{})
 	if !ok {
 		return hybridResults, nil
 	}
 
-	// Parse each result (key-value pairs)
-	for i := 1; i < len(resultSlice); i += 3 {
-		if i+2 >= len(resultSlice) {
-			break
-		}
+	// Extract the results array from the new format
+	resultsArray, ok := resultMap["results"]
+	if !ok {
+		return hybridResults, nil
+	}
 
-		// Get document key
-		docKey, ok := resultSlice[i].(string)
+	resultsSlice, ok := resultsArray.([]interface{})
+	if !ok {
+		return hybridResults, nil
+	}
+
+	// Parse each result in the results array
+	for _, resultItem := range resultsSlice {
+		// Each result item should be a map with "id", "score", and "values" fields
+		resultMap, ok := resultItem.(map[interface{}]interface{})
 		if !ok {
 			continue
 		}
 
-		// Get score
-		scoreStr, ok := resultSlice[i+1].(string)
+		// Extract document ID
+		docKey, ok := resultMap["id"].(string)
 		if !ok {
 			continue
 		}
 
-		score := 0.0
-		if scoreStr != "" {
-			score = llm.parseFloat(scoreStr)
+		// Extract score
+		var score float64
+		if scoreVal, ok := resultMap["score"]; ok {
+			switch v := scoreVal.(type) {
+			case string:
+				score = llm.parseFloat(v)
+			case float64:
+				score = v
+			case int64:
+				score = float64(v)
+			}
 		}
 
-		// Get document fields
-		fields, ok := resultSlice[i+2].([]interface{})
+		// Extract document values/fields
+		values, ok := resultMap["extra_attributes"].(map[interface{}]interface{})
 		if !ok {
 			continue
 		}
@@ -446,31 +516,27 @@ func (llm *LLMContainer) parseRedisSearchResults(results interface{}, searchType
 		}
 		doc.Metadata["id"] = docKey
 
-		// Parse field-value pairs
-		for j := 0; j < len(fields); j += 2 {
-			if j+1 >= len(fields) {
-				break
-			}
-
-			fieldName, ok := fields[j].(string)
+		// Parse field-value pairs from the values map
+		for fieldName, fieldValue := range values {
+			fieldNameStr, ok := fieldName.(string)
 			if !ok {
 				continue
 			}
 
-			fieldValue, ok := fields[j+1].(string)
+			fieldValueStr, ok := fieldValue.(string)
 			if !ok {
 				continue
 			}
 
-			switch fieldName {
-			case "PageContent":
-				doc.PageContent = fieldValue
-			case "Title":
-				doc.Metadata["title"] = fieldValue
+			switch fieldNameStr {
+			case "content":
+				doc.PageContent = fieldValueStr
+			case "rawkey":
+				doc.Metadata["rawkey"] = fieldValueStr
 			case "Keywords":
-				doc.Metadata["keywords"] = fieldValue
-			case "Source":
-				doc.Metadata["source"] = fieldValue
+				doc.Metadata["keywords"] = fieldValueStr
+			case "sources":
+				doc.Metadata["sources"] = fieldValueStr
 			}
 		}
 
@@ -483,7 +549,6 @@ func (llm *LLMContainer) parseRedisSearchResults(results interface{}, searchType
 		})
 	}
 
-	_ = totalCount // Use totalCount if needed for pagination
 	return hybridResults, nil
 }
 
