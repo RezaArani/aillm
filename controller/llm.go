@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -240,7 +240,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		o.searchAll = true
 	}
 
-	brieflyText := "briefly "
+	brieflyText := "briefly and very short "
 	if o.ForceLLMToAnswerLong {
 		brieflyText = ""
 	}
@@ -314,7 +314,7 @@ func (llm *LLMContainer) AskLLM(Query string, options ...LLMCallOption) (LLMResu
 		ragReferencesPrompt = `### Output Formatting Rules:
 - First, output the **full natural language answer**, formatted clearly.  
 - Then, on a **new line after the full answer**, add the **reference line** that begins with **⧉**, followed by a single valid JSON object in this format:  
-  ⧉ {"references":["chunk_id_1","chunk_id_2"]}
+  ⧉ {"references":["Reference_id_1","Reference_id_2"]}
 
 - The **⧉ line must come immediately after the answer**, with no additional explanation or text.  
 - If no references are applicable, **omit the ⧉ line completely** — do not include an empty or placeholder reference object.
@@ -516,8 +516,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 ### Instructions: 
 - Analyze the question carefully and reason step-by-step.
 - Then, provide a **clear answer `+brieflyText+`in %s.**.
-- If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
-**"@I can't find any answer regarding your question."**.
+- If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s that you don't have any information about the question.
 - Do **not** reference the original text or mention language/translation details.
 %s
 
@@ -551,7 +550,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 						rawKeyObject := LLMEmbeddingContent{}
 						err := json.Unmarshal([]byte(rawKey.(string)), &rawKeyObject)
 						if err == nil {
-							content += `####Reference: ` + rawKeyObject.Id + "\n"
+							content += `- Reference: {"id":"` + rawKeyObject.Id + `"` + "}\n"
 						}
 					}
 				}
@@ -588,8 +587,7 @@ your only answer to all of questions is the improved version of "` + llm.NotRela
 ### Instructions:
 - Analyze the question carefully and reason step-by-step and think about the question and answer first.
 - Then, provide a **clear answer `+brieflyText+` in %s.**.%s
-- If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s with something like:  
-**"I can't find any answer regarding your question."**. Do not forget to add **@** at the start of the response in case of unanswerable question.
+- If the question is unrelated to the provided context or cannot be answered based on the information above, **start the response with "@"** and reply politely in %s that you don't have any information about the question.
 - Do **not** reference the original text or mention language/translation details.
 - Ignore chunk completely if it is not related to the question.
 - Do not include chunk number in the response.

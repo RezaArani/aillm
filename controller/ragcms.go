@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,7 +62,6 @@ type LLMEmbeddingObject struct {
 	Contents        map[string]LLMEmbeddingContent `json:"Contents" redis:"Contents"`
 }
 
- 
 // getRawDocRedisId generates a unique Redis key for storing raw document data.
 // It combines the object ID and a sanitized version of the Index to create a consistent key format.
 //
@@ -179,8 +178,7 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	if err != nil {
 		return result, err
 	}
-	
-	
+
 	// Load existing data from Redis if available
 	err = result.load(llm.RedisClient.redisClient, result.getRawDocRedisId())
 	if err != nil && err.Error() != "key not found" {
@@ -208,10 +206,10 @@ func (llm *LLMContainer) EmbeddText(Index string, Contents LLMEmbeddingContent, 
 	curContents := result.Contents[Contents.Id]
 	// Cleanup previous keys
 	for _, key := range curContents.Keys {
-		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
+		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key, false)
 	}
 	for _, key := range curContents.GeneralKeys {
-		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
+		llm.deleteRedisWildCard(llm.RedisClient.redisClient, key, false)
 	}
 
 	// updating with new keys
@@ -413,31 +411,29 @@ func (llm *LLMContainer) RemoveEmbedding(Index string, options ...LLMCallOption)
 		EmbeddingPrefix: o.getEmbeddingPrefix(),
 		Index:           Index,
 	}
-	
+
 	// Load the embedding object from Redis
-	err:= llmo.load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
+	err := llmo.load(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
 	if err != nil && err.Error() != "key not found" {
 		return err
 	}
 
-
 	// Delete all associated keys stored in Redis
 	for _, content := range llmo.Contents {
 		for _, key := range content.Keys {
-			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
+			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key, false)
 			if err != nil {
 				return err
 			}
 		}
 		for _, key := range content.GeneralKeys {
-			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
+			_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key, false)
 			if err != nil {
 				return err
 			}
 		}
 	}
 	//Remove indexes should be implemented
-	
 
 	// Remove the embedding object from Redis
 	return llmo.delete(llm.RedisClient.redisClient, llmo.getRawDocRedisId())
@@ -459,13 +455,13 @@ func (llm *LLMContainer) RemoveEmbeddingSubKey(Index, rawDocID string, options .
 	// Delete all associated keys stored in Redis
 
 	for _, key := range keyToDelete.Keys {
-		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key, false)
 		if err != nil {
 			return err
 		}
 	}
 	for _, key := range keyToDelete.GeneralKeys {
-		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key,false)
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, key, false)
 		if err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -83,9 +83,9 @@ type TranscribeConfig struct {
 func (Ts *Transcriber) init() error {
 	if !Ts.initialized {
 		if Ts.MaxPageLimit == 0 {
-			Ts.MaxPageLimit = 20   // Default page limit if not specified
+			Ts.MaxPageLimit = 20 // Default page limit if not specified
 		}
-		
+
 		Ts.initialized = true
 		Ts.folderSep = "/"
 		if runtime.GOOS == "windows" {
@@ -98,7 +98,6 @@ func (Ts *Transcriber) init() error {
 				return err
 			}
 			Ts.TempFolder = filepath.Dir(exePath) + Ts.folderSep + "tmp"
-			 
 
 		}
 	}
@@ -107,7 +106,7 @@ func (Ts *Transcriber) init() error {
 
 // transcribeURL downloads and processes content from a given URL.
 //
-// This function downloads the content from the URL, detects the MIME type, and extracts text 
+// This function downloads the content from the URL, detects the MIME type, and extracts text
 // based on file type (PDF, HTML, etc.).
 //
 // Parameters:
@@ -138,7 +137,7 @@ func (Ts *Transcriber) TranscribeURL(inputURL string, tc TranscribeConfig) (stri
 
 // transcribeFile processes a local file and extracts text based on its MIME type.
 //
-// The function detects the MIME type if not provided, and processes the file accordingly 
+// The function detects the MIME type if not provided, and processes the file accordingly
 // (e.g., using OCR for PDFs or parsing plain text files).
 //
 // Parameters:
@@ -187,7 +186,7 @@ func (Ts *Transcriber) transcribeFile(fileName, mimeType string, tc TranscribeCo
 
 // downloadPage downloads the content from a given URL and caches it locally if not already cached.
 //
-// The function checks for a cached version of the file and downloads it if necessary, 
+// The function checks for a cached version of the file and downloads it if necessary,
 // saving it to the temporary folder.
 //
 // Parameters:
@@ -242,6 +241,7 @@ func (Ts *Transcriber) downloadPage(urlToGet string) ([]byte, string, string, bo
 		}
 	}
 }
+
 // getContentsFromTika extracts text from a document using Apache Tika.
 //
 // This function sends the document to a Tika server for text extraction and handles OCR settings.
@@ -290,7 +290,7 @@ func (Ts *Transcriber) getContentsFromTika(tc TranscribeConfig, inputPath string
 	buf := new(strings.Builder)
 	io.Copy(buf, ioReadCloser)
 	result := buf.String()
-	result = Ts.cleanupText(result,false)
+	result = Ts.cleanupText(result, false)
 	return result, pageCount, nil
 }
 
@@ -393,6 +393,7 @@ func (Ts Transcriber) prepareFileName(urlToGet string) string {
 	fileName = strings.ReplaceAll(fileName, "#", "_")
 	return fileName
 }
+
 // extractHTMLContent extracts readable text from HTML content.
 //
 // This function parses HTML content to extract text from headings, paragraphs, and tables,
@@ -469,7 +470,7 @@ func (Ts Transcriber) extractHTMLContent(htmlBytes []byte) string {
 //   - string: Cleaned-up text content.
 func (Ts Transcriber) extractTextContent(fileBytes []byte) string {
 	// Create a reader from the byte slice
-	return Ts.cleanupText(string(fileBytes),false)
+	return Ts.cleanupText(string(fileBytes), false)
 }
 
 // downloadRemoteFileWithMimeType downloads a file from the provided URL and determines its MIME type.

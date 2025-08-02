@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -122,7 +122,7 @@ func (llm *LLMContainer) DescribeImage(encodedImage, query string, options ...LL
 					{
 						"type": "image_url",
 						"image_url": map[string]string{
-							"url":  encodedImage,
+							"url": encodedImage,
 						},
 					},
 					{

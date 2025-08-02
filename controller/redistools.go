@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,21 +62,21 @@ func deleteKey(ctx context.Context, rdb *redis.Client, KeyID, indexName string) 
 // Parameters:
 //   - ctx: The context for the Redis operation.
 //   - rdb: The Redis client instance.
-//   - prefix: The prefix of the index.	
+//   - prefix: The prefix of the index.
 //
 // Returns:
 //   - error: An error if the operation fails.
 func createIndex(ctx context.Context, rdb *redis.Client, prefix string) error {
-	indexName:= "rawDocsIdx"
-	if prefix!=""{
-		indexName+=":"+prefix
+	indexName := "rawDocsIdx"
+	if prefix != "" {
+		indexName += ":" + prefix
 	}
 	_, err := rdb.Do(ctx, "FT.INFO", indexName).Result()
 	if err != nil {
 		// If the index does not exist, create it
-		indexPrefix:= "rawDocs:"
-		if prefix!=""{
-			indexPrefix+=prefix+":"
+		indexPrefix := "rawDocs:"
+		if prefix != "" {
+			indexPrefix += prefix + ":"
 		}
 		err = rdb.Do(ctx, "FT.CREATE", indexName,
 			"ON", "JSON", // فعال‌سازی JSON

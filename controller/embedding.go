@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -251,15 +251,15 @@ func (llm *LLMContainer) embedText(prefix, language, index, title, contents stri
 //   - error: An error if the cleaning fails.
 func (llm *LLMContainer) CleanEmbeddings(Confirm, prefix string) error {
 	if Confirm == "yes" {
-		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, "doc:all:"+prefix,true)
+		_, err := llm.deleteRedisWildCard(llm.RedisClient.redisClient, "doc:all:"+prefix, true)
 		if err != nil {
 			return err
 		}
-		_, err = llm.deleteRedisWildCard(llm.RedisClient.redisClient, "doc:context:"+prefix,true)
+		_, err = llm.deleteRedisWildCard(llm.RedisClient.redisClient, "doc:context:"+prefix, true)
 		if err != nil {
 			return err
 		}
-		_, err = llm.deleteRedisWildCard(llm.RedisClient.redisClient, "rawDocs:"+prefix,true)
+		_, err = llm.deleteRedisWildCard(llm.RedisClient.redisClient, "rawDocs:"+prefix, true)
 		if err != nil {
 			return err
 		}
@@ -276,21 +276,21 @@ func (llm *LLMContainer) CleanEmbeddings(Confirm, prefix string) error {
 		}
 
 		// delete indexes that match the wildcard
-		err = llm.deleteIndexes(indexes, "context:" + prefix)
+		err = llm.deleteIndexes(indexes, "context:"+prefix)
 		if err != nil {
 			return err
 		}
-		err = llm.deleteIndexes(indexes, "all:" + prefix)
+		err = llm.deleteIndexes(indexes, "all:"+prefix)
 		if err != nil {
 			return err
 		}
-		err = llm.deleteIndexes(indexes, "rawDocsIdx:" + prefix)
+		err = llm.deleteIndexes(indexes, "rawDocsIdx:"+prefix)
 		if err != nil {
 			return err
 		}
 
 		//memory indexes should be implemented
-		
+
 	}
 
 	return nil

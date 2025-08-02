@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Doe
+// Copyright (c) 2025 Reza Arani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ func splitTextIntoFixedSizedChunks(rawText string, chunkSize int) []string {
 	return chunks
 }
 
-func (emb *LLMTextEmbedding) SplitTextWithLLM() (docs []schema.Document,keywords []string, inconsistentChunks map[int]string, err error) {
+func (emb *LLMTextEmbedding) SplitTextWithLLM() (docs []schema.Document, keywords []string, inconsistentChunks map[int]string, err error) {
 	// Split the large text into chunks to avoid token limits (optional)
 	chunks := splitTextIntoFixedSizedChunks(emb.Text, emb.ChunkSize)
 	resultChunks := []schema.Document{}
@@ -190,7 +190,7 @@ func (llm LLMEmbeddingObject) sanitizeRedisKey(input string) string {
 // Returns:
 //   - int: The number of keys deleted.
 //   - error: An error if the deletion fails.
-func (llm *LLMContainer) deleteRedisWildCard(redisClient *redis.Client, k string,addWildCard bool) (int, error) {
+func (llm *LLMContainer) deleteRedisWildCard(redisClient *redis.Client, k string, addWildCard bool) (int, error) {
 	var ctx = context.Background()
 	// Replace spaces with underscores for key pattern matching
 	// k = strings.ReplaceAll(k, " ", "____")
@@ -218,4 +218,3 @@ func (llm *LLMContainer) deleteRedisWildCard(redisClient *redis.Client, k string
 	// CacheObject.Delete(k)
 	return keyCount, nil
 }
-

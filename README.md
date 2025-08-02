@@ -204,6 +204,12 @@ func main() {
 - Enhance the chatbot integration by supporting additional LLM models.
 - Dockerized version with Reset Service and Websocket web server.
 
+### 📢 Recent Updates in v1.2.13
+* **Fixed Redis FT.SEARCH Special Characters** - 🔧 Resolved critical issue with special characters like colons (:) and slashes (/) in search queries that caused "Syntax error at offset" errors
+* **Enhanced Query Escaping** - 🛡️ Proper escaping of special Redis FT.SEARCH characters including @, (), [], {}, *, +, ?, |, ^, $, -, =, ~, :, ;, !, #, %, &, ', ", \ and /
+* **Improved Search Reliability** - ✅ URLs, email addresses, and other text with special characters now work correctly with Redis FT.SEARCH
+* **Better Error Handling** - 🚀 Added safety checks to prevent empty queries and improved error messaging
+
 ### 📢 Recent Updates in v1.2.10
 * **Advanced Hybrid Search** - 🚀 Revolutionary hybrid search system combining vector similarity and lexical search with Reciprocal Rank Fusion (RRF) algorithm for up to 17% improved accuracy
 * **Multiple Search Algorithms** - 🔍 New search options: Hybrid Search, Lexical Search, and Semantic Search with automatic algorithm selection
